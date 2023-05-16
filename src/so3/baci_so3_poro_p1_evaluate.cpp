@@ -650,8 +650,24 @@ void DRT::ELEMENTS::So3_Poro_P1<so3_ele, distype>::GaussPointLoopP1(Teuchos::Par
     // **********************evaluate stiffness matrix and force vector+++++++++++++++++++++++++
     double detJ_w = Base::detJ_[gp] * Base::intpoints_.Weight(gp);  // gpweights[gp];
 
-    const double reacoeff = Base::fluid_mat_->ComputeReactionCoeff();
-    // if (force != nullptr or stiffmatrix != nullptr or reamatrix != nullptr )
+    static CORE::LINALG::Matrix<Base::numdim_, Base::numdim_> matreatensor(true);
+    static CORE::LINALG::Matrix<Base::numdim_, Base::numdim_> reatensor(true);
+    static CORE::LINALG::Matrix<Base::numdim_, Base::numdim_> linreac_dphi(true);
+    static CORE::LINALG::Matrix<Base::numdim_, Base::numdim_> linreac_dJ(true);
+    static CORE::LINALG::Matrix<Base::numdim_, 1> reafvel(true);
+    static CORE::LINALG::Matrix<Base::numdim_, 1> reavel(true);
+    {
+      static CORE::LINALG::Matrix<Base::numdim_, Base::numdim_> temp(true);
+      std::vector<double> anisotropic_permeability_coeffs =
+          Base::ComputeAnisotropicPermeabilityCoeffsAtGP(shapefct);
+      Base::fluid_mat_->ComputeReactionTensor(matreatensor, J, porosity,
+          Base::anisotropic_permeability_directions_, anisotropic_permeability_coeffs);
+      Base::fluid_mat_->ComputeLinMatReactionTensor(linreac_dphi, linreac_dJ, J, porosity);
+      temp.Multiply(1.0, matreatensor, defgrd_inv);
+      reatensor.MultiplyTN(defgrd_inv, temp);
+      reavel.Multiply(reatensor, velint);
+      reafvel.Multiply(reatensor, fvelint);
+    }
     {
       for (int k = 0; k < Base::numnod_; k++)
       {
@@ -666,7 +682,7 @@ void DRT::ELEMENTS::So3_Poro_P1<so3_ele, distype>::GaussPointLoopP1(Teuchos::Par
             estiff_p1(k, i * noddof_ + j) += fac * dW_dJ * dJ_dus(i * Base::numdim_ + j);
 
             ecoupl_p1(i * Base::numdim_ + j, k) +=
-                fac * (2 * J * reacoeff * porosity * (velint(j) - fvelint(j)) + J * Finvgradp(j)) *
+                fac * (2 * J * porosity * (reavel(j) - reafvel(j)) + J * Finvgradp(j)) *
                 shapefct(i);
           }
           estiff_p1(k, i * noddof_ + Base::numdim_) += fac * dW_dphi * shapefct(i);
