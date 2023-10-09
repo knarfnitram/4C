@@ -10,10 +10,14 @@
 #ifndef BACI_POROELAST_MONOLITHIC_H
 #define BACI_POROELAST_MONOLITHIC_H
 
+#include "baci_fsi_statustest.H"
 #include "baci_inpar_poroelast.H"
 #include "baci_inpar_structure.H"
 #include "baci_poroelast_base.H"
 #include "baci_poroelast_utils.H"
+
+#include <NOX.H>
+#include <NOX_Epetra.H>
 
 namespace CORE::LINALG
 {
@@ -35,7 +39,11 @@ namespace Teuchos
 namespace POROELAST
 {
   //! base class of all monolithic Poroelasticity algorithms
-  class Monolithic : public PoroBase
+  class Monolithic : public PoroBase,
+                     public NOX::Epetra::Interface::Required,
+                     public NOX::Epetra::Interface::Jacobian
+  // public NOX::Epetra::Interface::Preconditioner,
+  // public NOX::Direction::UserDefinedFactory
   {
    public:
     //! create using a Epetra_Comm
@@ -60,6 +68,9 @@ namespace POROELAST
 
     //! setup composed right hand side from field solvers
     void SetupRHS(bool firstcall = false) override;
+
+    //! setup composed right hand side from field solvers and save on given vector
+    virtual void SetupRHS(Epetra_Vector& f, bool firstcall);
 
     //! start a new time step
     void PrepareTimeStep() override;
@@ -140,6 +151,24 @@ namespace POROELAST
 
     //!@}
 
+    //! compute poroelast residual
+    bool computeF(const Epetra_Vector& x, Epetra_Vector& F, const FillType fillFlag);
+
+    //! compute poroelast block matrix
+    bool computeJacobian(const Epetra_Vector& x, Epetra_Operator& Jac);
+
+    //! preconditioner
+    bool computePreconditioner(
+        const Epetra_Vector& x, Epetra_Operator& M, Teuchos::ParameterList* precParams = 0);
+
+    //! create Linear System for NOX
+    Teuchos::RCP<NOX::Epetra::LinearSystem> CreateLinearSystem(
+        Teuchos::ParameterList& nlParams, NOX::Epetra::Vector& noxSoln);
+
+    //! do we need this?
+    Teuchos::RCP<NOX::Direction::Generic> buildDirection(
+        const Teuchos::RCP<NOX::GlobalData>& gd, Teuchos::ParameterList& params) const;
+
     //! solve linear system
     void LinearSolve();
 
@@ -172,6 +201,9 @@ namespace POROELAST
     //! evaluate fields at x^n+1_i+1 with x^n+1_i+1 = x_n+1_i + iterinc
     virtual void EvaluateFields(Teuchos::RCP<const Epetra_Vector> x);
 
+    /// Evaluate all fields at x^n+1 with x^n+1 = x_n + stepinc
+    void EvaluateNOX(Teuchos::RCP<const Epetra_Vector> x);
+
     //! evaluate fields seperately at x^n+1_i+1 with x^n+1_i+1 = x_n+1_i + iterinc
     virtual void EvaluateFields(
         Teuchos::RCP<const Epetra_Vector> sx, Teuchos::RCP<const Epetra_Vector> fx);
@@ -189,6 +221,8 @@ namespace POROELAST
 
     //! perform one time step (setup + solve + output)
     void DoTimeStep() override;
+
+    void DoTimeStepNew(const Teuchos::RCP<NOX::Epetra::Interface::Required>& interface);
 
     //! @name Output
 
@@ -235,12 +269,27 @@ namespace POROELAST
     //! read restart data
     void ReadRestart(const int step) override;
 
+    //! setup of NOX convergence tests
+    virtual Teuchos::RCP<NOX::StatusTest::Combo> CreateStatusTest(
+        Teuchos::ParameterList& nlParams, Teuchos::RCP<NOX::Epetra::Group> grp);
+
    protected:
     //! Aitken
     void Aitken();
 
     //! Aitken Reset
     [[maybe_unused]] void AitkenReset();
+
+
+    /// add a status test to be used for adaptive linear solver convergence
+    void AddStatusTest(Teuchos::RCP<NOX::FSI::AdaptiveNewtonNormF> test)
+    {
+      statustests_.push_back(test);
+    }
+
+    /// keep the status tests available so we can connect them with our
+    /// adaptive Newton direction
+    std::vector<Teuchos::RCP<NOX::FSI::AdaptiveNewtonNormF>> statustests_;
 
     //! @name Apply current field state to system
 
@@ -397,6 +446,14 @@ namespace POROELAST
     Teuchos::RCP<Teuchos::Time> timer_;  //!< timer for solution technique
 
     int iter_;  //!< iteration step
+
+    /// number of nonlinear iterations (done by NOX)
+    int noxiter_;
+
+    /// status of NOX convergence check
+    NOX::StatusTest::StatusType noxstatus_;
+
+    Teuchos::RCP<Epetra_Vector> nox_prev_;
 
     //!@}
 

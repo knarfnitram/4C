@@ -440,15 +440,21 @@ void ADAPTER::StructureBaseAlgorithm::CreateTimInt(const Teuchos::ParameterList&
         if (tmpstr->HaveConstraint())
         {
           if (coupling == INPAR::POROELAST::Monolithic_structuresplit or
-              coupling == INPAR::POROELAST::Monolithic_fluidsplit or
               coupling == INPAR::POROELAST::Monolithic_nopenetrationsplit)
+            structure_ = Teuchos::rcp(new FPSIStructureWrapper(tmpstr));
+          else if (coupling == INPAR::POROELAST::Monolithic_fluidsplit)
+            // wrong plate to apply correction wrapper?
+            // structure_ = Teuchos::rcp(
+            // new FPSIStructureWrapper(Teuchos::rcp(new StructureNOXCorrectionWrapper(tmpstr))));
             structure_ = Teuchos::rcp(new FPSIStructureWrapper(tmpstr));
           else
             structure_ = Teuchos::rcp(new StructureConstrMerged(tmpstr));
         }
         else
         {
-          structure_ = Teuchos::rcp(new FPSIStructureWrapper(tmpstr));
+          structure_ = Teuchos::rcp(
+              new FPSIStructureWrapper(Teuchos::rcp(new StructureNOXCorrectionWrapper(tmpstr))));
+          // structure_ = Teuchos::rcp(new FPSIStructureWrapper(tmpstr));
         }
       }
       break;

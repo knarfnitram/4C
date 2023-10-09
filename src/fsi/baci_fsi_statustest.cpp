@@ -49,6 +49,7 @@ double NOX::FSI::GenericNormF::computeNorm(const Epetra_Vector& v)
     case NOX::Abstract::Vector::TwoNorm:
       err = v.Norm2(&norm);
       if (err != 0) dserror("norm failed");
+      if (n == 0) dserror("Vector has length of 0");
       if (scaleType_ == Scaled) norm /= sqrt(1.0 * n);
       break;
 
@@ -176,7 +177,7 @@ double NOX::FSI::PartialNormF::computeNorm(const NOX::Abstract::Group& grp)
 
   const NOX::Abstract::Vector& abstract_f = grp.getF();
   const NOX::Epetra::Vector& f = Teuchos::dyn_cast<const NOX::Epetra::Vector>(abstract_f);
-
+  if (f.length() == 0) dserror("The length of F is 0, Therefore, no norm can not be computed.");
   // extract the inner vector elements we are interested in
 
   Teuchos::RCP<Epetra_Vector> v = extractor_.ExtractVector(f.getEpetraVector(), blocknum_);

@@ -100,7 +100,8 @@ void CORE::LINEAR_SOLVER::DirectSolver<MatrixType, VectorType>::Setup(
     {
       Teuchos::RCP<CORE::LINALG::BlockSparseMatrixBase> Ablock =
           Teuchos::rcp_dynamic_cast<CORE::LINALG::BlockSparseMatrixBase>(matrix);
-
+      if (matrix.is_null()) dserror("Matrix is 0.");
+      if (Ablock == Teuchos::null) dserror("Failed to cast to block matrix");
       int matrixDim = Ablock->FullRangeMap().NumGlobalElements();
       if (matrixDim > 50000)
       {

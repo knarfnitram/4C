@@ -103,6 +103,11 @@ void POROELAST::MonolithicSplitNoPenetration::SetupRHS(bool firstcall)
   SetupVector(*rhs_, StructureField()->RHS(), FluidField()->RHS());
 }
 
+void POROELAST::MonolithicSplitNoPenetration::SetupRHS(Epetra_Vector& f, bool firstcall)
+{
+  dserror("well currently not implemented.");
+}
+
 void POROELAST::MonolithicSplitNoPenetration::SetupVector(
     Epetra_Vector& f, Teuchos::RCP<const Epetra_Vector> sv, Teuchos::RCP<const Epetra_Vector> fv)
 {

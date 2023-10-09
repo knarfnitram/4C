@@ -24,6 +24,7 @@ namespace POROELAST
 {
   //! monolithic fluid split for condensing DOFs, when using the brinkman-equation
   class MonolithicFluidSplit : public MonolithicSplit
+  // public NOX::Epetra::Interface::Jacobian
   {
    public:
     //! create using a Epetra_Comm
@@ -49,8 +50,14 @@ namespace POROELAST
     //! setup composed right hand side from field solvers
     void SetupRHS(bool firstcall = false) override;
 
+    void SetupRHS(Epetra_Vector& f, bool firstcall);
+
     //! setup composed system matrix from field solvers
     void SetupSystemMatrix(CORE::LINALG::BlockSparseMatrixBase& mat) override;
+
+    void DoTimeStepNew(const Teuchos::RCP<NOX::Epetra::Interface::Required>& interface);
+
+    void TimeLoopNew(const Teuchos::RCP<NOX::Epetra::Interface::Required>& interface);
 
    private:
     //! build block vector from field vectors
@@ -70,6 +77,10 @@ namespace POROELAST
     //! recover Lagrange multiplier \f$\lambda_\Gamma\f$ at the interface at the end of each time
     //! step (i.e. condensed forces onto the structure) needed for rhs in next time step
     void RecoverLagrangeMultiplierAfterTimeStep() override;
+
+    //! create Newton Status tests
+    Teuchos::RCP<NOX::StatusTest::Combo> CreateStatusTest(
+        Teuchos::ParameterList& nlParams, Teuchos::RCP<NOX::Epetra::Group> grp) override;
 
     //! @name matrix transformation
     //! transform object for fluid interface matrix \f$F_{\Gamma \Gamma}\f$

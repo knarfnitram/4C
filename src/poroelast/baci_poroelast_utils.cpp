@@ -91,8 +91,34 @@ Teuchos::RCP<POROELAST::PoroBase> POROELAST::UTILS::CreatePoroAlgorithm(
     case INPAR::POROELAST::Monolithic_fluidsplit:
     {
       // create an POROELAST::MonolithicFluidSplit instance
-      poroalgo =
-          Teuchos::rcp(new POROELAST::MonolithicFluidSplit(comm, timeparams, porosity_splitter));
+      if (false)
+      {
+        poroalgo =
+            Teuchos::rcp(new POROELAST::MonolithicFluidSplit(comm, timeparams, porosity_splitter));
+        // if (setup_solver) poroalgo->SetupSolver();
+        //  read the restart information, set vectors and variables
+        // const int restart = problem->Restart();
+        //&poroalgo->ReadRestart(restart);
+
+        // now do the coupling setup and create the combined dofmap
+        // poroalgo->SetupSystem();
+        // poroalgo->TimeLoop();
+      }
+      else
+      {
+        Teuchos::RCP<POROELAST::MonolithicFluidSplit> poroalgo2 =
+            Teuchos::rcp(new POROELAST::MonolithicFluidSplit(comm, timeparams, porosity_splitter));
+        const int restart = problem->Restart();
+        poroalgo = poroalgo2;
+        poroalgo->ReadRestart(restart);
+
+        // now do the coupling setup and create the combined dofmap
+        poroalgo->SetupSystem();
+        poroalgo2->TimeLoopNew(poroalgo2);
+      }
+
+      // poroalgo2->TimeLoopNew(poroalgo2);
+      // poroalgo = poroalgo2;
       break;
     }
     case INPAR::POROELAST::Monolithic_nopenetrationsplit:

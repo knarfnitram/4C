@@ -19,6 +19,8 @@
 #include "baci_coupling_adapter_volmortar.H"
 #include "baci_fluid_ele_action.H"
 #include "baci_fluid_utils_mapextractor.H"
+#include "baci_fsi_nox_linearsystem.H"
+#include "baci_fsi_nox_newton.H"
 #include "baci_inpar_solver.H"
 #include "baci_io_control.H"
 #include "baci_lib_assemblestrategy.H"
@@ -29,9 +31,11 @@
 #include "baci_linalg_utils_sparse_algebra_assemble.H"
 #include "baci_linalg_utils_sparse_algebra_create.H"
 #include "baci_linalg_utils_sparse_algebra_manipulation.H"
+#include "baci_linalg_utils_sparse_algebra_print.H"
 #include "baci_linear_solver_method_linalg.H"
 #include "baci_mortar_manager_base.H"
 #include "baci_poroelast_defines.H"
+#include "baci_poroelast_nox_group.H"
 #include "baci_structure_aux.H"
 
 #include <Teuchos_Time.hpp>
@@ -140,6 +144,8 @@ POROELAST::Monolithic::Monolithic(const Epetra_Comm& comm, const Teuchos::Parame
   }
 }
 
+
+
 void POROELAST::Monolithic::DoTimeStep()
 {
   // counter and print header
@@ -169,9 +175,9 @@ void POROELAST::Monolithic::Solve()
 
   //---------------------------------------- initialise equilibrium loop and norms
   SetupNewton();
-
+  // std::cout<<*iterinc_<<std::endl;
   //---------------------------------------------- iteration loop
-  // equilibrium iteration loop (loop over k)
+  //  equilibrium iteration loop (loop over k)
   while (((not Converged()) and (iter_ <= itermax_)) or (iter_ <= itermin_))
   {
     timer_->start();
@@ -184,10 +190,14 @@ void POROELAST::Monolithic::Solve()
     // 1.) Update(iterinc_),
     // 2.) EvaluateForceStiffResidual(),
     // 3.) PrepareSystemForNewtonSolve()
+    std::cout << *iterinc_ << std::endl;
+    std::cout << *systemmatrix_ << std::endl;
     Evaluate(iterinc_, iter_ == 1);
     // std::cout << "  time for Evaluate : " <<  timer.totalElapsedTime(true) << "\n";
     // timer.reset();
-
+    std::cout << *iterinc_ << std::endl;
+    std::cout << *systemmatrix_ << std::endl;
+    std::cout << *rhs_ << std::endl;
     // if (iter_>1 and Step()>2 )
     // PoroFDCheck();
 
@@ -207,8 +217,8 @@ void POROELAST::Monolithic::Solve()
       // rebuild norms
       BuildConvergenceNorms();
     }
-
-    // print stuff
+    // std::cout<<*iterinc_<<std::endl;
+    //  print stuff
     PrintNewtonIter();
 
     // Aitken();
@@ -255,6 +265,70 @@ void POROELAST::Monolithic::Solve()
   }
 }
 
+
+Teuchos::RCP<NOX::Epetra::LinearSystem> POROELAST::Monolithic::CreateLinearSystem(
+    Teuchos::ParameterList& nlParams, NOX::Epetra::Vector& noxSoln)
+{
+  Teuchos::RCP<NOX::Epetra::LinearSystem> linSys;
+
+  Teuchos::ParameterList& printParams = nlParams.sublist("Printing");
+  Teuchos::ParameterList& dirParams = nlParams.sublist("Direction");
+  Teuchos::ParameterList& newtonParams = dirParams.sublist("Newton");
+  Teuchos::ParameterList& lsParams = newtonParams.sublist("Linear Solver");
+  // lsParams.set<double>("base tolerance", 1e-8);  // relative tolerance
+  // lsParams.set<double>("adaptive distance", 0.001);  // relative tolerance
+  // lsParams.set<std::string>("Aztec Solver", "GMRES");
+  // lsParams.set<std::string>("Convergence Test", "r0");
+  // lsParams.set<int>("Output Frequency", 10);
+  // lsParams.set<INPAR::FSI::Verbosity>("verbosity", INPAR::FSI::verbosity_full);
+  NOX::Epetra::Interface::Jacobian* iJac = this;
+  // NOX::Epetra::Interface::Preconditioner* iPrec = this;
+  SetupSystemMatrix();
+  // const Teuchos::RCP<CORE::LINALG::BlockSparseMatrixBase> J = &systemmatrix_;
+  const Teuchos::RCP<Epetra_Operator> J = this->systemmatrix_;
+  const Teuchos::RCP<Epetra_Operator> M = this->systemmatrix_;
+  // std::cout<<*J<<std::endl;
+
+  if (J.is_null()) dserror("Empty block matrix");
+
+
+  // const Teuchos::ParameterList& porodyn = DRT::Problem::Instance()->PoroelastDynamicParams();
+  // const Teuchos::ParameterList& solver = porodyn.sublist("MONOLITHIC SOLVER");
+
+  // const int linsolvernumber = poromono.get<int>("LINEAR_SOLVER");
+  const Teuchos::ParameterList& fdyn = DRT::Problem::Instance()->PoroelastDynamicParams();
+  const int linsolvernumber = fdyn.get<int>("LINEAR_SOLVER");
+  if (linsolvernumber == -1)
+    dserror(
+        "no linear solver defined for monolithic FSI. Please set LINEAR_SOLVER in FSI "
+        "DYNAMIC/MONOLITHIC SOLVER to a valid number!");
+
+  const Teuchos::ParameterList& porosolverparams =
+      DRT::Problem::Instance()->SolverParams(linsolvernumber);
+
+  auto solver = Teuchos::rcp(new CORE::LINALG::Solver(
+      porosolverparams, Comm(), DRT::Problem::Instance()->ErrorFile()->Handle()));
+
+  // TODO fix FSI::LinearSystem
+  linSys = Teuchos::rcp(new NOX::FSI::LinearSystem(
+      printParams, lsParams, Teuchos::rcp(iJac, false), J, noxSoln, solver));
+
+
+  return linSys;
+}
+
+
+Teuchos::RCP<NOX::StatusTest::Combo> POROELAST::Monolithic::CreateStatusTest(
+    Teuchos::ParameterList& nlParams, Teuchos::RCP<NOX::Epetra::Group> grp)
+{
+  dserror("currently CreateStatusTest is not implemented");
+  // return 0;
+  Teuchos::RCP<NOX::StatusTest::Combo> combo =
+      Teuchos::rcp(new NOX::StatusTest::Combo(NOX::StatusTest::Combo::OR));
+  return combo;
+}
+
+
 void POROELAST::Monolithic::UpdateStateIncrementally(Teuchos::RCP<const Epetra_Vector> x)
 {
   TEUCHOS_FUNC_TIME_MONITOR("POROELAST::Monolithic::UpdateStateIncrementally");
@@ -277,7 +351,7 @@ void POROELAST::Monolithic::UpdateStateIncrementally(Teuchos::RCP<const Epetra_V
     // update poro iterinc
     if (is_part_of_multifield_problem_) UpdatePoroIterinc(x);
   }
-
+  // TODO this is the problem?
   UpdateStateIncrementally(sx, fx);
 }
 
@@ -323,6 +397,8 @@ void POROELAST::Monolithic::Evaluate(Teuchos::RCP<const Epetra_Vector> x, bool f
 
   // fill off diagonal blocks and fill global system matrix
   SetupSystemMatrix();
+
+  // PrintBlockMatrixInMatlabFormat("Old_timestepmatrix.dat",*systemmatrix_);
 
   // check whether we have a sanely filled tangent matrix
   if (not systemmatrix_->Filled())
@@ -556,14 +632,136 @@ void POROELAST::Monolithic::SetupRHS(bool firstcall)
   // create full monolithic rhs vector
   if (rhs_ == Teuchos::null) rhs_ = Teuchos::rcp(new Epetra_Vector(*DofRowMap(), true));
 
-  // fill the Poroelasticity rhs vector rhs_ with the single field rhss
+  // fill the Poroelasticity rhs vector rhs_ with the single field rhs
   SetupVector(*rhs_, StructureField()->RHS(), FluidField()->RHS());
 
   // add rhs terms due to no penetration condition
   nopen_handle_->ApplyCondRHS(iterinc_, rhs_);
 }
 
+void POROELAST::Monolithic::SetupRHS(Epetra_Vector& f, bool firstcall)
+{
+  // initialize f
+  f.PutScalar(0.0);
+
+  // call intial Setup_Function
+  SetupRHS(firstcall);
+
+  // update the solution vector
+  f.Update(1.0, *rhs_, 0.0);
+
+  // NOX expects the 'positive' residual. The negative sign for the
+  // linearized Newton system J*dx=-r is done internally by NOX.
+  // Since we assembled the right hand side, we have to invert the sign here.
+  // f.Scale(-1.);
+  dserror("Please do not call me!");
+}
+
 void POROELAST::Monolithic::PrepareTimeStep() { PoroBase::PrepareTimeStep(); }
+
+bool POROELAST::Monolithic::computeF(
+    const Epetra_Vector& x, Epetra_Vector& F, const FillType fillFlag)
+{
+  TEUCHOS_FUNC_TIME_MONITOR("POROELAST::Monolithic::computeF");
+  // std::ostringstream oss;
+  // std::cout<<*iterinc_<<std::endl;
+  // EvaluateNOX(x, false);
+  // std::cout<<x<<std::endl;
+  F.PutScalar(0);
+  EvaluateNOX(Teuchos::rcp(&x, false));
+  // std::cout<<*systemmatrix_<<std::endl;
+  SetupSystemMatrix();
+  SetupRHS();
+
+  // Teuchos::RCP<const Epetra_Vector> zeros = Teuchos::rcp(new const Epetra_Vector(rhs_->Map(),
+  // true));
+  CORE::LINALG::ApplyDirichletToSystem(*rhs_, *zeros_, *(combinedDBCMap_));
+
+  // F.Scale(-1.0);
+  F.Update(1.0, *rhs_, 0);
+  // TODO continue here
+  Extractor()->ExtractVector(F, 1)->Scale(-1.0);
+  // std::cout<<F<<std::endl;
+  // nox_prev_->Update(1.0, x, 0);
+
+
+  // SECOND WAY
+  // EvaluateNOX(Teuchos::rcp(&x, false));
+  // SetupRHS(F,false);
+  /*std::cout<<"x:"<<std::endl;
+  std::cout<<x<<std::endl;
+  iterinc_->Update(1.0,x,0);
+  iterinc_->Update(1.0,*nox_prev_,-1.0);
+  std::cout<<"iteration inc"<<std::endl;
+  std::cout<<*iterinc_<< std::endl;
+  Evaluate(iterinc_,true);
+  std::cout<<"system matrix"<<std::endl;
+  std::cout<<*systemmatrix_<< std::endl;
+  std::cout<<"right hand side"<<std::endl;
+  std::cout<<*rhs_<<std::endl;
+  //F.Update(-1.0,*rhs_,0);
+  nox_prev_->Update(1.0,x,0);
+
+
+  F.Update(-1.0,*rhs_,0.0);*/
+  return true;
+}
+
+
+void POROELAST::Monolithic::EvaluateNOX(Teuchos::RCP<const Epetra_Vector> x)
+{
+  TEUCHOS_FUNC_TIME_MONITOR("POROELAST::Monolithic::EvaluateNOX");
+
+  Teuchos::RCP<const Epetra_Vector> sx;
+  Teuchos::RCP<const Epetra_Vector> fx;
+
+  if (x != Teuchos::null)
+  {
+    ExtractFieldVectors(x, sx, fx);
+  }
+
+  StructureField()->Evaluate(sx);
+  SetStructSolution();
+  FluidField()->Evaluate(fx);
+  SetFluidSolution();
+  // FluidField()->Evaluate(Teuchos::null);
+  // StructureField()->Evaluate(Teuchos::null);
+
+  return;
+}
+
+
+bool POROELAST::Monolithic::computeJacobian(const Epetra_Vector& x, Epetra_Operator& Jac)
+{
+  TEUCHOS_FUNC_TIME_MONITOR("POROELAST::Monolithic::computeJacobian");
+  EvaluateNOX(Teuchos::rcp(&x, false));
+  // Evaluate(Teuchos::rcp(&x, false),false);
+  CORE::LINALG::BlockSparseMatrixBase& mat =
+      Teuchos::dyn_cast<CORE::LINALG::BlockSparseMatrixBase>(Jac);
+  SetupSystemMatrix();
+  dserror("test");
+  // PrintBlockMatrixInMatlabFormat("mat.dat",mat);
+  return true;
+}
+
+
+bool POROELAST::Monolithic::computePreconditioner(
+    const Epetra_Vector& x, Epetra_Operator& M, Teuchos::ParameterList* precParams)
+{
+  return true;
+}
+
+
+Teuchos::RCP<NOX::Direction::Generic> POROELAST::Monolithic::buildDirection(
+    const Teuchos::RCP<NOX::GlobalData>& gd, Teuchos::ParameterList& params) const
+{
+  Teuchos::RCP<NOX::FSI::Newton> newton = Teuchos::rcp(new NOX::FSI::Newton(gd, params));
+  for (unsigned i = 0; i < statustests_.size(); ++i)
+  {
+    statustests_[i]->SetNewton(newton);
+  }
+  return newton;
+}
 
 void POROELAST::Monolithic::LinearSolve()
 {

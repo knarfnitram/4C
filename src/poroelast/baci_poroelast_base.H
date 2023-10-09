@@ -41,6 +41,11 @@ namespace ADAPTER
   class MortarVolCoupl;
 }  // namespace ADAPTER
 
+namespace NOX::Epetra::Interface
+{
+  class Required;
+}
+
 namespace POROELAST
 {
   class NoPenetrationConditionHandle;
@@ -175,6 +180,7 @@ namespace POROELAST
     //! perform one time step (setup + solve + output)
     virtual void DoTimeStep() = 0;
 
+
     //! setup solver (for monolithic only)
     virtual bool SetupSolver() { return false; }
 
@@ -247,7 +253,8 @@ namespace POROELAST
 
     Teuchos::RCP<CORE::LINALG::MapExtractor> porosity_splitter_;
 
-
+    //! List containing the inparsed NOX-Parameters
+    Teuchos::ParameterList noxparameterlist_;
 
     //! @name Volume Mortar stuff
 
@@ -287,6 +294,10 @@ namespace POROELAST
 
     //! underlying fluid of the poro problem
     Teuchos::RCP<::ADAPTER::FluidPoro> fluid_;
+
+    //! extract the NOX-Parameters from a teuchos list
+    void FilterDefaultNOXParameters(
+        const Teuchos::ParameterList& poroelastdyn, Teuchos::ParameterList& list);
 
     //!@}
   };
@@ -373,6 +384,7 @@ namespace POROELAST
     Teuchos::RCP<CORE::LINALG::SparseMatrix> fluid_fluid_constraint_matrix_;
     Teuchos::RCP<CORE::LINALG::SparseMatrix> fluid_structure_constraint_matrix_;
     Teuchos::RCP<CORE::LINALG::SparseMatrix> structure_vel_constraint_matrix_;
+
     //!@}
   };
 }  // namespace POROELAST

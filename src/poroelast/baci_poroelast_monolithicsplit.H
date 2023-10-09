@@ -32,6 +32,8 @@ namespace POROELAST
     //! setup composed right hand side from field solvers (depends on which field is splitted)
     void SetupRHS(bool firstcall = false) override = 0;
 
+    void SetupRHS(Epetra_Vector& f, bool firstcall) override = 0;
+
     //! setup composed system matrix from field solvers (depends on which field is splitted)
     void SetupSystemMatrix(CORE::LINALG::BlockSparseMatrixBase& mat) override = 0;
 

@@ -10,6 +10,7 @@
 #include "baci_poroelast_dyn.H"
 
 #include "baci_poroelast_base.H"
+#include "baci_poroelast_monolithicfluidsplit.H"
 #include "baci_poroelast_utils.H"
 #include "baci_poroelast_utils_clonestrategy.H"
 #include "baci_poroelast_utils_setup.H"
@@ -37,16 +38,18 @@ void poroelast_drt()
   Teuchos::RCP<POROELAST::PoroBase> poroalgo =
       POROELAST::UTILS::CreatePoroAlgorithm(poroelastdyn, comm);
 
-  // read the restart information, set vectors and variables
-  const int restart = problem->Restart();
-  poroalgo->ReadRestart(restart);
+  if (false)
+  {
+    // read the restart information, set vectors and variables
+    const int restart = problem->Restart();
+    poroalgo->ReadRestart(restart);
 
-  // now do the coupling setup and create the combined dofmap
-  poroalgo->SetupSystem();
+    // now do the coupling setup and create the combined dofmap
+    poroalgo->SetupSystem();
 
-  // solve the whole problem
-  poroalgo->TimeLoop();
-
+    poroalgo->TimeLoop();
+    //  poroalgo->TimeLoopNew(static_cast<POROELAST::Monolithic>(*poroalgo));
+  }
   // summarize the performance measurements
   Teuchos::TimeMonitor::summarize();
 

@@ -32,6 +32,8 @@
 #include "baci_poroelast_utils.H"
 #include "baci_structure_aux.H"
 
+#include <NOX_Epetra_Interface_Required.H>
+
 #include <cstddef>
 
 
@@ -224,6 +226,128 @@ POROELAST::PoroBase::PoroBase(const Epetra_Comm& comm, const Teuchos::ParameterL
           "not working properly! There is probably a bug in the linearization ....");
     }
   }
+
+  // extract the NOX-Parameters from the global parameter list
+  FilterDefaultNOXParameters(timeparams, noxparameterlist_);
+}
+
+void POROELAST::PoroBase::FilterDefaultNOXParameters(
+    const Teuchos::ParameterList& poroelastdyn, Teuchos::ParameterList& list)
+{
+  // monolithic solver settings
+  const Teuchos::ParameterList& poromono = poroelastdyn;
+
+  // Get the top level parameter list
+  Teuchos::ParameterList& nlParams = list;
+
+  // nlParams.set<std::string>("Nonlinear Solver", "Line Search Based");
+  //  nlParams.set("Preconditioner", "None");
+  //  nlParams.set("Norm abs F", fporoono.get<double>("CONVTOL"));
+
+  // Currently, we have to keep the parameter CONVTOL for lung and constraint FSI
+  // nlParams.set("Norm abs pres", poromono.get<double>("CONVTOL"));
+  // nlParams.set("Norm abs vel", poromono.get<double>("CONVTOL"));
+  // nlParams.set("Norm abs disp", poromono.get<double>("CONVTOL"));
+
+  nlParams.set("Max Iterations", poromono.get<int>("ITEMAX"));
+  nlParams.set("Min Iterations", poromono.get<int>("ITEMIN"));
+  // nlParams.set("Max Iterations", 1);
+
+  // set tolerances for nonlinear solver
+
+
+  // combinations are set in split
+  // poromono.get<std::string>("NORMCOMBI_RESFINC")=="And"
+
+  nlParams.set("Norm combo res inc", poromono.get<std::string>("NORMCOMBI_RESFINC"));
+  nlParams.set("Norm type res", poromono.get<std::string>("VECTORNORM_RESF"));
+
+  nlParams.set("Norm type prim", poromono.get<std::string>("NORM_INC"));
+  nlParams.set("Norm type res", poromono.get<std::string>("NORM_RESF"));
+  nlParams.set("Norm combo res inc", poromono.get<std::string>("NORMCOMBI_RESFINC"));
+  nlParams.set("Norm type res", poromono.get<std::string>("VECTORNORM_RESF"));
+  nlParams.set("Norm type inc", poromono.get<std::string>("VECTORNORM_INC"));
+
+
+  // L2 increment input
+  // if (poromono.get<std::string>("VECTORNORM_INC") == "L2")
+  //{
+  nlParams.set("Tol inc poro", poromono.get<double>("TOLINC_PORO"));
+  nlParams.set("Tol inc dis", poromono.get<double>("TOLINC_DISP"));
+  nlParams.set("Tol inc vel", poromono.get<double>("TOLINC_VEL"));
+  nlParams.set("Tol inc pres", poromono.get<double>("TOLINC_PRES"));
+  nlParams.set("Tol inc glob", poromono.get<double>("TOLINC_GLOBAL"));
+  //}
+
+  // L2 res input
+  // if (poromono.get<std::string>("VECTORNORM_RESF") == "L2")
+  //{
+  nlParams.set("Tol res poro", poromono.get<double>("TOLRES_PORO"));
+  nlParams.set("Tol res dis", poromono.get<double>("TOLRES_DISP"));
+  nlParams.set("Tol res vel", poromono.get<double>("TOLRES_VEL"));
+  nlParams.set("Tol res pres", poromono.get<double>("TOLRES_PRES"));
+  nlParams.set("Tol res glob", poromono.get<double>("TOLRES_GLOBAL"));
+  nlParams.set("Tol res ncoup", poromono.get<double>("TOLRES_NCOUP"));
+  //}
+  /*
+    // INF increment block
+    //if (poromono.get<std::string>("VECTORNORM_INC") == "INF")
+    //{
+      nlParams.set("Tol poro inc INF", poromono.get<double>("TOLINC_PORO"));
+      nlParams.set("Tol dis inc INF", poromono.get<double>("TOLINC_DISP"));
+      nlParams.set("Tol vel inc INF", poromono.get<double>("TOLINC_VEL"));
+      nlParams.set("Tol pres inc INF", poromono.get<double>("TOLINC_PRES"));
+      nlParams.set("Tol glob res INF", poromono.get<double>("TOLINC_GLOBAL"));
+    //}
+
+    // INF residual block
+    //if (poromono.get<std::string>("VECTORNORM_RESF") == "INF")
+    //{
+      nlParams.set("Tol poro res INF", poromono.get<double>("TOLRES_PORO"));
+      nlParams.set("Tol dis res INF", poromono.get<double>("TOLRES_DISP"));
+      nlParams.set("Tol vel res INF", poromono.get<double>("TOLRES_VEL"));
+      nlParams.set("Tol pres res INF", poromono.get<double>("TOLRES_PRES"));
+      nlParams.set("Tol glob res INF", poromono.get<double>("TOLRES_GLOBAL"));
+    //} */
+
+  // sublists
+
+  // currently no search direction
+  Teuchos::ParameterList& dirParams = nlParams.sublist("Direction");
+  //
+  dirParams.set<std::string>("Method", "Newton");
+  Teuchos::ParameterList& lineSearchParams = nlParams.sublist("Line Search");
+
+  Teuchos::ParameterList& solverOptions = nlParams.sublist("Solver Options");
+
+
+  Teuchos::ParameterList& newtonParams = dirParams.sublist("Newton");
+  Teuchos::ParameterList& lsParams = newtonParams.sublist("Linear Solver");
+
+  // Teuchos::RCP<NOX::Direction::UserDefinedFactory> newtonfactory = Teuchos::rcp(this, false);
+  // dirParams.set("User Defined Direction Factory", newtonfactory);
+
+
+  // status tests are expensive, but instructive
+  solverOptions.set<std::string>("Status Test Check Type", "Minimal");
+  solverOptions.set<std::string>("Status Test Check Type", "Complete");
+
+  // be explicit about linear solver parameters
+  lsParams.set<std::string>("Aztec Solver", "GMRES");
+  // lsParams.set<std::string>("BiCGStab","GMRES");
+  lsParams.set<std::string>("Orthogonalization", "Modified");
+
+  // "r0", "rhs", "norm", "no scaling", "sol"
+  lsParams.set<std::string>("Convergence Test", "r0");
+
+  lsParams.set<int>("Size of Krylov Subspace", 50);
+  lsParams.set<int>("Max Iterations", 1000);
+  lsParams.set<std::string>("Preconditioner", "User Defined");
+  lsParams.set<int>("Output Frequency", 10);
+  lsParams.set<bool>("Output Solver Details", true);
+
+  // lsParams.set<INPAR::FSI::Verbosity>("verbosity", verbosity_);  // verbosity level of FSI
+  // algorithm
 }
 
 void POROELAST::PoroBase::ReadRestart(const int step)
@@ -394,6 +518,7 @@ void POROELAST::PoroBase::TimeLoop()
     DoTimeStep();
   }
 }
+
 
 void POROELAST::PoroBase::Output(bool forced_writerestart)
 {

@@ -14,6 +14,7 @@
 #include "baci_linalg_blocksparsematrix.H"
 #include "baci_linalg_serialdensematrix.H"
 #include "baci_linalg_serialdensevector.H"
+#include "baci_linalg_utils_sparse_algebra_assemble.H"
 #include "baci_linear_solver_method_linalg.H"
 
 #include <Epetra_CrsMatrix.h>
@@ -127,17 +128,22 @@ bool NOX::FSI::LinearSystem::applyJacobianInverse(
 
   Teuchos::RCP<Epetra_Vector> fres = Teuchos::rcp(new Epetra_Vector(input.getEpetraVector()));
   Teuchos::RCP<Epetra_Vector> disi = Teuchos::rcp(&(result.getEpetraVector()), false);
+  // std::cout<<"FSI_NOX_LINSYS_EVAL"<<std::endl;
 
-  // get the hopefully adaptive linear solver convergence tolerance
+  // std::cout<<*fres<<std::endl;
+  //  get the hopefully adaptive linear solver convergence tolerance
   solver_->Params()
       .sublist("Belos Parameters")
       .set("Convergence Tolerance", p.get("Tolerance", 1.0e-10));
+
+
   solver_->Solve(jacPtr_, disi, fres, true, callcount_ == 0);
 
+  // std::cout<<*disi<<std::endl;
   callcount_ += 1;
 
   // Set the output parameters in the "Output" sublist
-  if (outputSolveDetails_)
+  if (outputSolveDetails_ or true)
   {
     Teuchos::ParameterList& outputList = p.sublist("Output");
     const int prevLinIters = outputList.get("Total Number of Linear Iterations", 0);
