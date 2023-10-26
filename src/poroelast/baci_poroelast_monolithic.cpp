@@ -666,23 +666,34 @@ bool POROELAST::Monolithic::computeF(
   // std::ostringstream oss;
   // std::cout<<*iterinc_<<std::endl;
   // EvaluateNOX(x, false);
-  // std::cout<<x<<std::endl;
+  std::cout << "computeF - x" << std::endl;
+  std::cout << x << std::endl;
+
   F.PutScalar(0);
   EvaluateNOX(Teuchos::rcp(&x, false));
-  // std::cout<<*systemmatrix_<<std::endl;
+
   SetupSystemMatrix();
   SetupRHS();
 
+  std::cout << "computeF - systemmatrix" << std::endl;
+  std::cout << *systemmatrix_ << std::endl;
+
   // Teuchos::RCP<const Epetra_Vector> zeros = Teuchos::rcp(new const Epetra_Vector(rhs_->Map(),
   // true));
-  CORE::LINALG::ApplyDirichletToSystem(*rhs_, *zeros_, *(combinedDBCMap_));
+  // rhs_->Scale(-1.0);
+  // CORE::LINALG::ApplyDirichletToSystem(*rhs_, *zeros_, *(combinedDBCMap_));
+
+  CORE::LINALG::ApplyDirichletToSystem(*systemmatrix_, F, *rhs_, *zeros_, *CombinedDBCMap());
+  // F.Scale(-1.0);
+  // Extractor()->ExtractVector(rhs_, 1)->Scale(-1.0);
+  F.Update(-1.0, *rhs_, 0);
+  std::cout << "computeF - F" << std::endl;
+  std::cout << F << std::endl;
+  // TODO continue here
 
   // F.Scale(-1.0);
-  F.Update(1.0, *rhs_, 0);
-  // TODO continue here
-  Extractor()->ExtractVector(F, 1)->Scale(-1.0);
-  // std::cout<<F<<std::endl;
-  // nox_prev_->Update(1.0, x, 0);
+  //  std::cout<<F<<std::endl;
+  //  nox_prev_->Update(1.0, x, 0);
 
 
   // SECOND WAY

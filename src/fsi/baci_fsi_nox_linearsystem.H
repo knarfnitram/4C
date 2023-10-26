@@ -11,6 +11,7 @@
 #ifndef BACI_FSI_NOX_LINEARSYSTEM_H
 #define BACI_FSI_NOX_LINEARSYSTEM_H
 
+#include <Epetra_Map.h>
 #include <NOX.H>
 #include <NOX_Common.H>
 #include <NOX_Epetra_Group.H>
@@ -57,6 +58,18 @@ namespace NOX::FSI
             structure_solver,  ///< (used-defined) linear algebraic solver
         const Teuchos::RCP<NOX::Epetra::Scaling> scalingObject =
             Teuchos::null);  ///< scaling of the linear system
+
+    LinearSystem(Teuchos::ParameterList& printParams,  ///< printing parameters
+        Teuchos::ParameterList& linearSolverParams,    ///< parameters for linear solution
+        const Teuchos::RCP<NOX::Epetra::Interface::Jacobian>& iJac,  ///< NOX interface to Jacobian
+        const Teuchos::RCP<Epetra_Operator>& J,  ///< the Jacobian or stiffness matrix
+        const NOX::Epetra::Vector& cloneVector,  ///< initial guess of the solution process
+        Teuchos::RCP<CORE::LINALG::Solver>
+            structure_solver,  ///< (used-defined) linear algebraic solver
+        ///< scaling of the linear system
+        Teuchos::RCP<const Epetra_Map> dbcmap,
+        const Teuchos::RCP<NOX::Epetra::Scaling> scalingObject =
+            Teuchos::null);  /// epetra map to apply dirichlet conditions before solving
 
     /// provide storage pattern of tangent matrix, i.e. the operator
     OperatorType getOperatorType(const Epetra_Operator& Op);
@@ -158,6 +171,8 @@ namespace NOX::FSI
 
     Teuchos::Time timer_;
     mutable double timeApplyJacbianInverse_;
+
+    Teuchos::RCP<const Epetra_Map> dbcmap_;
   };
 }  // namespace NOX::FSI
 

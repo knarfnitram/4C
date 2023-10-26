@@ -51,6 +51,32 @@ NOX::FSI::LinearSystem::LinearSystem(Teuchos::ParameterList& printParams,
 
   reset(linearSolverParams);
 }
+// TODO find out if we can apply here the dc conditions
+NOX::FSI::LinearSystem::LinearSystem(Teuchos::ParameterList& printParams,
+    Teuchos::ParameterList& linearSolverParams,
+    const Teuchos::RCP<NOX::Epetra::Interface::Jacobian>& iJac,
+    const Teuchos::RCP<Epetra_Operator>& J, const NOX::Epetra::Vector& cloneVector,
+    Teuchos::RCP<CORE::LINALG::Solver> solver, Teuchos::RCP<const Epetra_Map> dbcmap,
+    const Teuchos::RCP<NOX::Epetra::Scaling> s)
+    : utils_(printParams),
+      jacInterfacePtr_(iJac),
+      jacType_(EpetraOperator),
+      precType_(EpetraOperator),
+      jacPtr_(J),
+      scaling_(s),
+      conditionNumberEstimate_(0.0),
+      callcount_(0),
+      solver_(solver),
+      timer_("", true),
+      timeApplyJacbianInverse_(0.0),
+      dbcmap_(dbcmap)
+{
+  tmpVectorPtr_ = Teuchos::rcp(new NOX::Epetra::Vector(cloneVector));
+
+  jacType_ = getOperatorType(*jacPtr_);
+
+  reset(linearSolverParams);
+}
 
 /*----------------------------------------------------------------------*
  *----------------------------------------------------------------------*/
@@ -128,18 +154,15 @@ bool NOX::FSI::LinearSystem::applyJacobianInverse(
 
   Teuchos::RCP<Epetra_Vector> fres = Teuchos::rcp(new Epetra_Vector(input.getEpetraVector()));
   Teuchos::RCP<Epetra_Vector> disi = Teuchos::rcp(&(result.getEpetraVector()), false);
-  // std::cout<<"FSI_NOX_LINSYS_EVAL"<<std::endl;
+  std::cout << "FSI_NOX_LINSYS_EVAL" << std::endl;
 
-  // std::cout<<*fres<<std::endl;
   //  get the hopefully adaptive linear solver convergence tolerance
   solver_->Params()
       .sublist("Belos Parameters")
       .set("Convergence Tolerance", p.get("Tolerance", 1.0e-10));
 
-
   solver_->Solve(jacPtr_, disi, fres, true, callcount_ == 0);
 
-  // std::cout<<*disi<<std::endl;
   callcount_ += 1;
 
   // Set the output parameters in the "Output" sublist

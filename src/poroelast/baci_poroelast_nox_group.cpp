@@ -30,8 +30,11 @@ void NOX::POROELAST::Group::CaptureSystemState()
   // we know we already have the first linear system calculated
   // mporo_.SetupSystemMatrix();
   // mporo_.SetupRHS(RHSVector.getEpetraVector(), true);
+  // mporo_.Extractor()->ExtractVector(*(mporo_.RHS()), 1)->Scale(-1.0);
+  // RHSVector.getEpetraVector().Update(1.0, *(mporo_.RHS()), 0.0);
+  // mporo_->Extractor()->ExtractVector(F, 1)->Scale(-1.0);
+  // std::cout << *(mporo_.RHS()) << std::endl;
   RHSVector.getEpetraVector().Update(-1.0, *(mporo_.RHS()), 0.0);
-  std::cout << *(mporo_.RHS()) << std::endl;
   sharedLinearSystem.getObject(this);
   isValidJacobian = true;
   isValidRHS = true;

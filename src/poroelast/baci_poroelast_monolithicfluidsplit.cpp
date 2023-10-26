@@ -255,9 +255,9 @@ void POROELAST::MonolithicFluidSplit::DoTimeStepNew(
   Teuchos::ParameterList& lsParams = newtonParams.sublist("Linear Solver");
   // Teuchos::ParameterList& newtonParams= dirParams.sublist("Forcing Term Initial Tolerance");
 
-  Teuchos::ParameterList& searchParams = nlParams.sublist("Line Search");
-  searchParams.set("Method", "Backtrack");
-  // searchParams.set<int>("Forcing Term Initial Tolerance", 0.0001);
+  // Teuchos::ParameterList& searchParams = nlParams.sublist("Line Search");
+  // searchParams.set("Method", "Backtrack");
+  // searchParams.set<int>("Forcing Term Initial Tolerance", 0.00001);
   Teuchos::ParameterList& printParams = nlParams.sublist("Printing");
   printParams.set("MyPID", Comm().MyPID());
   zeros_ = CORE::LINALG::CreateVector(*DofRowMap(), true);
@@ -300,14 +300,19 @@ void POROELAST::MonolithicFluidSplit::DoTimeStepNew(
 
   nox_prev_ = Teuchos::rcp(new Epetra_Vector(*DofRowMap(), true));
   if (iterinc_.is_null()) iterinc_ = Teuchos::rcp(new Epetra_Vector(*DofRowMap(), true));
+  if (zeros_.is_null()) zeros_ = Teuchos::rcp(new Epetra_Vector(*DofRowMap(), true));
   // we know we already have the first linear system calculated
-
+  SetupSolver();
+  CORE::LINALG::ApplyDirichletToSystem(
+      *systemmatrix_, *iterinc_, *rhs_, *zeros_, *CombinedDBCMap());
   grp->CaptureSystemState();
   std::ostringstream oss;
   if (grp->getF().length() == 0) dserror("well thats bad");
   // solve the whole thing
   noxstatus_ = solver->solve();
   noxiter_ = solver->getNumIterations();
+  BuildConvergenceNorms();
+  PrintNewtonIter();
 
   // Newton-Raphson iteration
   // Solve();
@@ -429,7 +434,7 @@ void POROELAST::MonolithicFluidSplit::SetupSystemMatrix(CORE::LINALG::BlockSpars
   // done. make sure all blocks are filled.
   mat.Complete();
 
-  mat.ApplyDirichlet(*(combinedDBCMap_), true);
+  // mat.ApplyDirichlet(*(combinedDBCMap_), true);
 
   fgicur_ = Teuchos::rcp(new CORE::LINALG::SparseMatrix(f->Matrix(1, 0)));
   fggcur_ = Teuchos::rcp(new CORE::LINALG::SparseMatrix(f->Matrix(1, 1)));
@@ -579,10 +584,10 @@ Teuchos::RCP<NOX::StatusTest::Combo> POROELAST::MonolithicFluidSplit::CreateStat
   // Create some other plausibility tests
   Teuchos::RCP<NOX::StatusTest::MaxIters> maxiters =
       Teuchos::rcp(new NOX::StatusTest::MaxIters(nlParams.get<int>("Max Iterations")));
-  // Teuchos::RCP<NOX::StatusTest::FiniteValue> fv = Teuchos::rcp(new NOX::StatusTest::FiniteValue);
+  Teuchos::RCP<NOX::StatusTest::FiniteValue> fv = Teuchos::rcp(new NOX::StatusTest::FiniteValue);
 
   // Add single tests to the top-level test combo
-  // combo->addStatusTest(fv);
+  combo->addStatusTest(fv);
   combo->addStatusTest(converged);
   combo->addStatusTest(maxiters);
 
@@ -634,8 +639,9 @@ Teuchos::RCP<NOX::StatusTest::Combo> POROELAST::MonolithicFluidSplit::CreateStat
   // setup tests for interface
   // --------------------------------------------------------------------
   // build mapextractor
+  // TODO find out how to calculate the norms of Jac and dx without using Do
   std::vector<Teuchos::RCP<const Epetra_Map>> interface;
-  interface.push_back(StructureField()->Interface()->FSICondMap());
+  interface.push_back(DofRowMap());
   interface.push_back(Teuchos::null);
   CORE::LINALG::MultiMapExtractor interfaceextract(*DofRowMap(), interface);
 
@@ -660,7 +666,7 @@ Teuchos::RCP<NOX::StatusTest::Combo> POROELAST::MonolithicFluidSplit::CreateStat
           NOX::FSI::PartialNormUpdate::Unscaled));
 
   // tests needed to adapt relative tolerance of the linear solver
-  AddStatusTest(interfaceTest_L2);
+  // AddStatusTest(interfaceTest_L2);
 
   // add norm-tests to interface NOX::StatusTest::Combo
   interfacecombo->addStatusTest(interfaceTest_L2);
@@ -669,17 +675,29 @@ Teuchos::RCP<NOX::StatusTest::Combo> POROELAST::MonolithicFluidSplit::CreateStat
   interfacecombo->addStatusTest(interfaceTestUpdate_inf);
 
   // add interface test combo to top-level test combo
-  converged->addStatusTest(interfacecombo);
+  // converged->addStatusTest(interfacecombo);
+  Teuchos::RCP<NOX::StatusTest::NormF> absresid = Teuchos::rcp(new NOX::StatusTest::NormF(
+      1.0e-8, NOX::Abstract::Vector::TwoNorm, NOX::StatusTest::NormF::Unscaled));
+  converged->addStatusTest(absresid);
+
+  Teuchos::RCP<NOX::StatusTest::NormUpdate> update =
+      Teuchos::rcp(new NOX::StatusTest::NormUpdate(1.0e-6, NOX::StatusTest::NormUpdate::Unscaled));
+  converged->addStatusTest(update);
   // ---------- end of interface tests
 
   // --------------------------------------------------------------------
   // setup tests for fluid velocity field
   // --------------------------------------------------------------------
   // build mapextractor
-  std::vector<Teuchos::RCP<const Epetra_Map>> fluidvel;
-  fluidvel.push_back(FluidField()->InnerVelocityRowMap());
-  fluidvel.push_back(Teuchos::null);
-  CORE::LINALG::MultiMapExtractor fluidvelextract(*DofRowMap(), fluidvel);
+  std::vector<Teuchos::RCP<const Epetra_Map>> fluid_vel;
+  Teuchos::RCP<const Epetra_Vector> rhs_f = Extractor()->ExtractVector(rhs_, 1);
+  auto fluid_vel_block_map = FluidField()->ExtractVelocityPart(rhs_f)->Map();
+  Teuchos::RCP<Epetra_Map> vecmap = Teuchos::rcp(
+      new Epetra_Map(fluid_vel_block_map.NumGlobalElements(), fluid_vel_block_map.NumMyElements(),
+          fluid_vel_block_map.MyGlobalElements(), 0, fluid_vel_block_map.Comm()));
+  fluid_vel.push_back(vecmap);
+  fluid_vel.push_back(Teuchos::null);
+  CORE::LINALG::MultiMapExtractor fluid_vel_extract(*DofRowMap(), fluid_vel);
 
   // create NOX::StatusTest::Combo for fluid velocity field
   Teuchos::RCP<NOX::StatusTest::Combo> fluidvelcombo =
@@ -687,17 +705,17 @@ Teuchos::RCP<NOX::StatusTest::Combo> POROELAST::MonolithicFluidSplit::CreateStat
 
   // create Norm-objects for each norm that has to be tested
   Teuchos::RCP<NOX::FSI::PartialNormF> innerFluidVel_L2 = Teuchos::rcp(new NOX::FSI::PartialNormF(
-      "vel res l2", fluidvelextract, 1, nlParams.get<double>("Tol res vel"),
+      "vel res l2", fluid_vel_extract, 0, nlParams.get<double>("Tol res vel"),
       NOX::Abstract::Vector::TwoNorm, NOX::FSI::PartialNormF::Scaled));
   Teuchos::RCP<NOX::FSI::PartialNormF> innerFluidVel_inf = Teuchos::rcp(new NOX::FSI::PartialNormF(
-      "VELOC residual", fluidvelextract, 1, nlParams.get<double>("Tol res vel"),
+      "VELOC residual", fluid_vel_extract, 0, nlParams.get<double>("Tol res vel"),
       NOX::Abstract::Vector::MaxNorm, NOX::FSI::PartialNormF::Unscaled));
   Teuchos::RCP<NOX::FSI::PartialNormUpdate> innerFluidVelUpdate_L2 =
-      Teuchos::rcp(new NOX::FSI::PartialNormUpdate("VELOC update", fluidvelextract, 1,
+      Teuchos::rcp(new NOX::FSI::PartialNormUpdate("VELOC update", fluid_vel_extract, 0,
           nlParams.get<double>("Tol inc vel"), NOX::Abstract::Vector::TwoNorm,
           NOX::FSI::PartialNormUpdate::Scaled));
   Teuchos::RCP<NOX::FSI::PartialNormUpdate> innerFluidVelUpdate_inf =
-      Teuchos::rcp(new NOX::FSI::PartialNormUpdate("VELOC update", fluidvelextract, 1,
+      Teuchos::rcp(new NOX::FSI::PartialNormUpdate("VELOC update", fluid_vel_extract, 0,
           nlParams.get<double>("Tol inc vel"), NOX::Abstract::Vector::MaxNorm,
           NOX::FSI::PartialNormUpdate::Unscaled));
 
@@ -719,7 +737,14 @@ Teuchos::RCP<NOX::StatusTest::Combo> POROELAST::MonolithicFluidSplit::CreateStat
   // --------------------------------------------------------------------
   // build mapextractor
   std::vector<Teuchos::RCP<const Epetra_Map>> fluidpress;
-  fluidpress.push_back(FluidField()->PressureRowMap());
+
+  Teuchos::RCP<const Epetra_Vector> rhs_pres = Extractor()->ExtractVector(rhs_, 1);
+  auto fluid_pres_block_map = FluidField()->ExtractPressurePart(rhs_pres)->Map();
+  Teuchos::RCP<Epetra_Map> pres_map = Teuchos::rcp(
+      new Epetra_Map(fluid_vel_block_map.NumGlobalElements(), fluid_vel_block_map.NumMyElements(),
+          fluid_vel_block_map.MyGlobalElements(), 0, fluid_vel_block_map.Comm()));
+
+  fluidpress.push_back(pres_map);
   fluidpress.push_back(Teuchos::null);
   CORE::LINALG::MultiMapExtractor fluidpressextract(*DofRowMap(), fluidpress);
 
@@ -753,7 +778,7 @@ Teuchos::RCP<NOX::StatusTest::Combo> POROELAST::MonolithicFluidSplit::CreateStat
   fluidpresscombo->addStatusTest(fluidPressUpdate_inf);
 
   // add fluid pressure test combo to top-level test combo
-  // converged->addStatusTest(fluidpresscombo);
+  converged->addStatusTest(fluidpresscombo);
   // ---------- end of fluid pressure field tests
 
   // Finally, return the test combo
