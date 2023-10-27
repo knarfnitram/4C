@@ -87,6 +87,8 @@ namespace POROELAST
     //! setup newton solver
     virtual void SetupNewton();
 
+    // apply Dirichlet Conditions
+    void ApplyDirichletConditions();
 
     //! build the combined dirichletbcmap
     void BuildCombinedDBCMap() override;
@@ -130,6 +132,16 @@ namespace POROELAST
 
     //! right hand side vector
     Teuchos::RCP<const Epetra_Vector> RHS() override { return rhs_; }
+
+    //! right hand side vector
+    Teuchos::RCP<const Epetra_Vector> RHSNOX()
+    {
+      if (rhsnox_ == Teuchos::null) rhsnox_ = Teuchos::rcp(new Epetra_Vector(*DofRowMap(), true));
+
+      rhsnox_->Update(-1.0, *rhs_, 0.0);
+      // Extractor()->ExtractVector(*(rhsnox_), 0)->Scale(-1.0);
+      return rhsnox_;
+    }
 
     //! zero all entries in iterinc vector
     void ClearPoroIterinc();
@@ -344,6 +356,7 @@ namespace POROELAST
 
     Teuchos::RCP<Epetra_Vector> rhs_;  //!< rhs of Poroelasticity system
 
+    Teuchos::RCP<Epetra_Vector> rhsnox_;  //!< rhs of Poroelasticity system
     //!@}
 
     enum INPAR::STR::DynamicType strmethodname_;  //!< enum for STR time integration

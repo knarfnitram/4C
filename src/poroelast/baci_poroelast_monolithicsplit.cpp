@@ -76,8 +76,14 @@ void POROELAST::MonolithicSplit::PrepareTimeStep()
     Teuchos::RCP<Epetra_Vector> ifvelnp = FluidField()->ExtractInterfaceVelnp();
     Teuchos::RCP<Epetra_Vector> ifveln = FluidField()->ExtractInterfaceVeln();
 
+
     ddi_->Update(1.0, *idispnp, -1.0, *idispn, 0.0);
     ddi_->Update(-1.0, *ifveln, timescale);
+
+    std::cout << "ddi_:" << *ddi_ << std::endl;
+    std::cout << "ifvelnp:" << *ifvelnp << std::endl;
+    std::cout << "ifveln:" << *ifveln << std::endl;
+
 
     if (fsibcmap_->NumGlobalElements())
     {
@@ -97,6 +103,10 @@ void POROELAST::MonolithicSplit::PrepareTimeStep()
       // no DBCs on FSI interface -> just make preconditioners consistent (structure decides)
       ifvelnp = StructureToFluidAtInterface(ddi_);
 
+    std::cout << "Applied" << std::endl;
+    std::cout << "ddi_:" << *ddi_ << std::endl;
+    std::cout << "ifvelnp:" << *ifvelnp << std::endl;
+    std::cout << "ifveln:" << *ifveln << std::endl;
     FluidField()->ApplyInterfaceVelocities(ifvelnp);
   }
 }

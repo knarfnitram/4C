@@ -42,7 +42,7 @@ namespace NOX
       virtual NOX::Abstract::Group::ReturnType computeF();
 
       /// calculate the Jacobian matrix
-      // virtual NOX::Abstract::Group::ReturnType computeJacobian();
+      virtual NOX::Abstract::Group::ReturnType computeJacobian();
 
       NOX::Abstract::Group::ReturnType computeNewton(Teuchos::ParameterList& p);
 

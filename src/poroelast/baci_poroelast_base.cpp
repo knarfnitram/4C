@@ -316,7 +316,7 @@ void POROELAST::PoroBase::FilterDefaultNOXParameters(
   Teuchos::ParameterList& dirParams = nlParams.sublist("Direction");
   //
   dirParams.set<std::string>("Method", "Newton");
-  // Teuchos::ParameterList& lineSearchParams = nlParams.sublist("Line Search");
+  Teuchos::ParameterList& lineSearchParams = nlParams.sublist("Line Search");
 
   Teuchos::ParameterList& solverOptions = nlParams.sublist("Solver Options");
 

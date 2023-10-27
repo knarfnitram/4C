@@ -596,7 +596,10 @@ void STR::TimIntOneStepTheta::UpdateStepState()
   // update state
   // new displacements at t_{n+1} -> t_n
   //    D_{n} := D_{n+1}
+  std::cout << "disn_" << *disn_ << std::endl;
+  std::cout << "dis_ " << dis_ << std::endl;
   dis_->UpdateSteps(*disn_);
+
   // new velocities at t_{n+1} -> t_n
   //    V_{n} := V_{n+1}
   vel_->UpdateSteps(*veln_);

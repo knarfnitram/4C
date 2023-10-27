@@ -34,7 +34,9 @@ void NOX::POROELAST::Group::CaptureSystemState()
   // RHSVector.getEpetraVector().Update(1.0, *(mporo_.RHS()), 0.0);
   // mporo_->Extractor()->ExtractVector(F, 1)->Scale(-1.0);
   // std::cout << *(mporo_.RHS()) << std::endl;
-  RHSVector.getEpetraVector().Update(-1.0, *(mporo_.RHS()), 0.0);
+
+  // RHSVector.getEpetraVector().Update(-1.0, *(mporo_.RHS()), 0.0);
+  RHSVector.getEpetraVector().Update(1.0, *(mporo_.RHSNOX()), 0.0);
   sharedLinearSystem.getObject(this);
   isValidJacobian = true;
   isValidRHS = true;
@@ -61,7 +63,7 @@ NOX::Abstract::Group::ReturnType NOX::POROELAST::Group::computeF()
 
 /*----------------------------------------------------------------------*
  *----------------------------------------------------------------------*/
-/*NOX::Abstract::Group::ReturnType NOX::POROELAST::Group::computeJacobian()
+NOX::Abstract::Group::ReturnType NOX::POROELAST::Group::computeJacobian()
 {
   NOX::Abstract::Group::ReturnType ret = NOX::Epetra::Group::computeJacobian();
   if (ret == NOX::Abstract::Group::Ok)
@@ -73,7 +75,7 @@ NOX::Abstract::Group::ReturnType NOX::POROELAST::Group::computeF()
     }
   }
   return ret;
-}*/
+}
 
 
 /*----------------------------------------------------------------------*

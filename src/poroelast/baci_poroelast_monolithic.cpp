@@ -190,13 +190,24 @@ void POROELAST::Monolithic::Solve()
     // 1.) Update(iterinc_),
     // 2.) EvaluateForceStiffResidual(),
     // 3.) PrepareSystemForNewtonSolve()
+    std::cout << "iterinc_ Before evalute" << std::endl;
     std::cout << *iterinc_ << std::endl;
+
+    std::cout << "systemmatrix_ Before evalute" << std::endl;
     std::cout << *systemmatrix_ << std::endl;
+
+    std::cout << "rhs_ Before evalute" << std::endl;
+    if (not rhs_.is_null()) std::cout << *rhs_ << std::endl;
+
     Evaluate(iterinc_, iter_ == 1);
     // std::cout << "  time for Evaluate : " <<  timer.totalElapsedTime(true) << "\n";
     // timer.reset();
-    std::cout << *iterinc_ << std::endl;
+    // std::cout << *iterinc_ << std::endl;
+
+    std::cout << "systemmatrix_ after evalute" << std::endl;
     std::cout << *systemmatrix_ << std::endl;
+
+    std::cout << "rhs_ after evalute" << std::endl;
     std::cout << *rhs_ << std::endl;
     // if (iter_>1 and Step()>2 )
     // PoroFDCheck();
@@ -208,6 +219,8 @@ void POROELAST::Monolithic::Solve()
       // (Newton-ready) residual with blanked Dirichlet DOFs (see adapter_timint!)
       // is done in PrepareSystemForNewtonSolve() within Evaluate(iterinc_)
       LinearSolve();
+      std::cout << "iterinc_ after Linsolve" << std::endl;
+      std::cout << *iterinc_ << std::endl;
       // std::cout << "  time for Evaluate LinearSolve: " << timer.totalElapsedTime(true) << "\n";
       // timer.reset();
 
@@ -265,6 +278,15 @@ void POROELAST::Monolithic::Solve()
   }
 }
 
+void POROELAST::Monolithic::ApplyDirichletConditions()
+{
+  zeros_ = Teuchos::rcp(new Epetra_Vector(*DofRowMap(), true));
+  iterinc_ = Teuchos::rcp(new Epetra_Vector(*DofRowMap(), true));
+
+  CORE::LINALG::ApplyDirichletToSystem(
+      *systemmatrix_, *iterinc_, *rhs_, *zeros_, *CombinedDBCMap());
+}
+
 
 Teuchos::RCP<NOX::Epetra::LinearSystem> POROELAST::Monolithic::CreateLinearSystem(
     Teuchos::ParameterList& nlParams, NOX::Epetra::Vector& noxSoln)
@@ -275,19 +297,15 @@ Teuchos::RCP<NOX::Epetra::LinearSystem> POROELAST::Monolithic::CreateLinearSyste
   Teuchos::ParameterList& dirParams = nlParams.sublist("Direction");
   Teuchos::ParameterList& newtonParams = dirParams.sublist("Newton");
   Teuchos::ParameterList& lsParams = newtonParams.sublist("Linear Solver");
-  // lsParams.set<double>("base tolerance", 1e-8);  // relative tolerance
-  // lsParams.set<double>("adaptive distance", 0.001);  // relative tolerance
-  // lsParams.set<std::string>("Aztec Solver", "GMRES");
-  // lsParams.set<std::string>("Convergence Test", "r0");
-  // lsParams.set<int>("Output Frequency", 10);
-  // lsParams.set<INPAR::FSI::Verbosity>("verbosity", INPAR::FSI::verbosity_full);
   NOX::Epetra::Interface::Jacobian* iJac = this;
   // NOX::Epetra::Interface::Preconditioner* iPrec = this;
-  SetupSystemMatrix();
-  // const Teuchos::RCP<CORE::LINALG::BlockSparseMatrixBase> J = &systemmatrix_;
-  const Teuchos::RCP<Epetra_Operator> J = this->systemmatrix_;
-  const Teuchos::RCP<Epetra_Operator> M = this->systemmatrix_;
+  // SetupSystemMatrix();
+  //  const Teuchos::RCP<CORE::LINALG::BlockSparseMatrixBase> J = &systemmatrix_;
+  const Teuchos::RCP<Epetra_Operator> J = systemmatrix_;
+  const Teuchos::RCP<Epetra_Operator> M = systemmatrix_;
   // std::cout<<*J<<std::endl;
+  std::cout << "J:" << *systemmatrix_ << std::endl;
+  std::cout << *rhs_ << std::endl;
 
   if (J.is_null()) dserror("Empty block matrix");
 
@@ -362,7 +380,6 @@ void POROELAST::Monolithic::UpdateStateIncrementally(
   // update velocities and pressures before passed to the structural field
   //  UpdateIterIncrementally(fx),
   FluidField()->UpdateNewton(fx);
-
   // call all elements and assemble rhs and matrices
   // structural field
 
@@ -666,14 +683,19 @@ bool POROELAST::Monolithic::computeF(
   // std::ostringstream oss;
   // std::cout<<*iterinc_<<std::endl;
   // EvaluateNOX(x, false);
+
   std::cout << "computeF - x" << std::endl;
   std::cout << x << std::endl;
+  Teuchos::RCP<Epetra_Vector> x2 = CORE::LINALG::CreateVector(*DofRowMap(), true);
 
+  x2->Update(1.0, x, 0);
   F.PutScalar(0);
-  EvaluateNOX(Teuchos::rcp(&x, false));
+  // EvaluateNOX(Teuchos::rcp(&x, false));
+  EvaluateNOX(x2);
+  SetupRHS();
 
   SetupSystemMatrix();
-  SetupRHS();
+
 
   std::cout << "computeF - systemmatrix" << std::endl;
   std::cout << *systemmatrix_ << std::endl;
@@ -682,11 +704,12 @@ bool POROELAST::Monolithic::computeF(
   // true));
   // rhs_->Scale(-1.0);
   // CORE::LINALG::ApplyDirichletToSystem(*rhs_, *zeros_, *(combinedDBCMap_));
-
-  CORE::LINALG::ApplyDirichletToSystem(*systemmatrix_, F, *rhs_, *zeros_, *CombinedDBCMap());
+  // CORE::LINALG::ApplyDirichletToSystem(*systemmatrix_, *iterinc_, *rhs_, *zeros_,
+  // *CombinedDBCMap());
   // F.Scale(-1.0);
-  // Extractor()->ExtractVector(rhs_, 1)->Scale(-1.0);
-  F.Update(-1.0, *rhs_, 0);
+  F.PutScalar(0.0);
+  // Extractor()->ExtractVector(rhs_, 1)->Scale(-1.0);s
+  F.Update(1.0, *RHSNOX(), 0);
   std::cout << "computeF - F" << std::endl;
   std::cout << F << std::endl;
   // TODO continue here
@@ -731,12 +754,13 @@ void POROELAST::Monolithic::EvaluateNOX(Teuchos::RCP<const Epetra_Vector> x)
     ExtractFieldVectors(x, sx, fx);
   }
 
+
   StructureField()->Evaluate(sx);
   SetStructSolution();
   FluidField()->Evaluate(fx);
   SetFluidSolution();
-  // FluidField()->Evaluate(Teuchos::null);
-  // StructureField()->Evaluate(Teuchos::null);
+  FluidField()->Evaluate(Teuchos::null);
+  StructureField()->Evaluate(Teuchos::null);
 
   return;
 }
@@ -795,8 +819,15 @@ void POROELAST::Monolithic::LinearSolve()
     // apply dirichlet boundary conditions
     CORE::LINALG::ApplyDirichletToSystem(*sparse, *iterinc_, *rhs_, *zeros_, *CombinedDBCMap());
 
+    std::cout << "systemmatrix_ before solve " << std::endl;
+    std::cout << *sparse << std::endl;
+
+    std::cout << "rhs_ before solve" << std::endl;
+    std::cout << *rhs_ << std::endl;
     // standard solver call
     solver_->Solve(sparse->EpetraOperator(), iterinc_, rhs_, true, iter_ == 1);
+    std::cout << "iterinc_ after solve" << std::endl;
+    std::cout << *iterinc_ << std::endl;
   }
   else  // use bgs2x2_operator
   {

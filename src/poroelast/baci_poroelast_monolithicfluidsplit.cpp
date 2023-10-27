@@ -255,17 +255,24 @@ void POROELAST::MonolithicFluidSplit::DoTimeStepNew(
   Teuchos::ParameterList& lsParams = newtonParams.sublist("Linear Solver");
   // Teuchos::ParameterList& newtonParams= dirParams.sublist("Forcing Term Initial Tolerance");
 
-  // Teuchos::ParameterList& searchParams = nlParams.sublist("Line Search");
+  Teuchos::ParameterList& searchParams = nlParams.sublist("Line Search");
   // searchParams.set("Method", "Backtrack");
-  // searchParams.set<int>("Forcing Term Initial Tolerance", 0.00001);
+  searchParams.set<int>("Forcing Term Initial Tolerance", 0.01);
   Teuchos::ParameterList& printParams = nlParams.sublist("Printing");
   printParams.set("MyPID", Comm().MyPID());
   zeros_ = CORE::LINALG::CreateVector(*DofRowMap(), true);
   // Evaluate(zeros_, false);
-  EvaluateNOX(zeros_);
-  SetupRHS(true);
+  Evaluate(Teuchos::null, true);
+  if (iterinc_.is_null()) iterinc_ = Teuchos::rcp(new Epetra_Vector(*DofRowMap(), true));
+  // EvaluateNOX(iterinc_);
+  // SetupRHS(true);
   // std::cout<<*iterinc_<< std::endl;
   // SetupRHS(true);
+  std::cout << *systemmatrix_ << std::endl;
+  std::cout << *rhs_ << std::endl;
+
+  // SetupSystemMatrix(*systemmatrix_);
+  std::cout << "After setupsystemmatrix" << std::endl;
   std::cout << *systemmatrix_ << std::endl;
   std::cout << *rhs_ << std::endl;
 
@@ -299,20 +306,33 @@ void POROELAST::MonolithicFluidSplit::DoTimeStepNew(
       NOX::Solver::buildSolver(grp, combo, Teuchos::RCP<Teuchos::ParameterList>(&nlParams, false));
 
   nox_prev_ = Teuchos::rcp(new Epetra_Vector(*DofRowMap(), true));
-  if (iterinc_.is_null()) iterinc_ = Teuchos::rcp(new Epetra_Vector(*DofRowMap(), true));
+
   if (zeros_.is_null()) zeros_ = Teuchos::rcp(new Epetra_Vector(*DofRowMap(), true));
+  auto zeros_2 = Teuchos::rcp(new Epetra_Vector(*DofRowMap(), true));
+
   // we know we already have the first linear system calculated
-  SetupSolver();
-  CORE::LINALG::ApplyDirichletToSystem(
-      *systemmatrix_, *iterinc_, *rhs_, *zeros_, *CombinedDBCMap());
+  // SetupSolver();
+
+  std::cout << "systemmatrix_ in time step after dirichlet" << std::endl;
+  std::cout << *systemmatrix_ << std::endl;
+
+  CORE::LINALG::ApplyDirichletToSystem(*systemmatrix_, *zeros_2, *rhs_, *zeros_, *CombinedDBCMap());
   grp->CaptureSystemState();
+
   std::ostringstream oss;
   if (grp->getF().length() == 0) dserror("well thats bad");
   // solve the whole thing
+
+
+  std::cout << "systemmatrix_ in time step (after diricht) " << std::endl;
+  std::cout << *systemmatrix_ << std::endl;
   noxstatus_ = solver->solve();
   noxiter_ = solver->getNumIterations();
-  BuildConvergenceNorms();
-  PrintNewtonIter();
+  grp->getX().print(oss);
+  // iterinc_->Update(1.0,grp->getX().createMultiVector(2,NOX::DeepCopy),0);
+  std::cout << oss.str() << std::endl;
+  // BuildConvergenceNorms();
+  // PrintNewtonIter();
 
   // Newton-Raphson iteration
   // Solve();
@@ -434,12 +454,13 @@ void POROELAST::MonolithicFluidSplit::SetupSystemMatrix(CORE::LINALG::BlockSpars
   // done. make sure all blocks are filled.
   mat.Complete();
 
-  // mat.ApplyDirichlet(*(combinedDBCMap_), true);
 
   fgicur_ = Teuchos::rcp(new CORE::LINALG::SparseMatrix(f->Matrix(1, 0)));
   fggcur_ = Teuchos::rcp(new CORE::LINALG::SparseMatrix(f->Matrix(1, 1)));
   cgicur_ = Teuchos::rcp(new CORE::LINALG::SparseMatrix(k_fs->Matrix(1, 0)));
   cggcur_ = Teuchos::rcp(new CORE::LINALG::SparseMatrix(k_fs->Matrix(1, 1)));
+  mat.Merge(true);
+  mat.ApplyDirichlet(*(combinedDBCMap_), true);
 }
 
 void POROELAST::MonolithicFluidSplit::SetupVector(Epetra_Vector& f,
