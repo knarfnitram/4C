@@ -69,8 +69,6 @@ namespace POROELAST
     //! setup composed right hand side from field solvers
     void SetupRHS(bool firstcall = false) override;
 
-    //! setup composed right hand side from field solvers and save on given vector
-    virtual void SetupRHS(Epetra_Vector& f, bool firstcall);
 
     //! start a new time step
     void PrepareTimeStep() override;
@@ -133,13 +131,11 @@ namespace POROELAST
     //! right hand side vector
     Teuchos::RCP<const Epetra_Vector> RHS() override { return rhs_; }
 
-    //! right hand side vector
+    //! return the right hand side vector scaled with -1 for nox
     Teuchos::RCP<const Epetra_Vector> RHSNOX()
     {
       if (rhsnox_ == Teuchos::null) rhsnox_ = Teuchos::rcp(new Epetra_Vector(*DofRowMap(), true));
-
       rhsnox_->Update(-1.0, *rhs_, 0.0);
-      // Extractor()->ExtractVector(*(rhsnox_), 0)->Scale(-1.0);
       return rhsnox_;
     }
 

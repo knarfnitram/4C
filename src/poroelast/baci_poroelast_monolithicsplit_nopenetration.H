@@ -58,7 +58,6 @@ namespace POROELAST
     //! contains header to PrintNewtonIter
     void PrintNewtonIterHeaderStream(std::ostringstream& oss) override;
 
-    void SetupRHS(Epetra_Vector& f, bool firstcall);
 
    protected:
     //! @name Apply current field state to system

@@ -38,11 +38,6 @@ POROELAST::MonolithicStructureSplit::MonolithicStructureSplit(const Epetra_Comm&
   lambda_ = Teuchos::rcp(new Epetra_Vector(*StructureField()->Interface()->FSICondMap()));
 }
 
-void POROELAST::MonolithicStructureSplit::SetupRHS(Epetra_Vector& f, bool firstcall)
-{
-  dserror("well currently not implemented.");
-}
-
 void POROELAST::MonolithicStructureSplit::SetupSystem()
 {
   {

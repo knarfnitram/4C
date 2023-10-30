@@ -298,14 +298,9 @@ Teuchos::RCP<NOX::Epetra::LinearSystem> POROELAST::Monolithic::CreateLinearSyste
   Teuchos::ParameterList& newtonParams = dirParams.sublist("Newton");
   Teuchos::ParameterList& lsParams = newtonParams.sublist("Linear Solver");
   NOX::Epetra::Interface::Jacobian* iJac = this;
-  // NOX::Epetra::Interface::Preconditioner* iPrec = this;
-  // SetupSystemMatrix();
-  //  const Teuchos::RCP<CORE::LINALG::BlockSparseMatrixBase> J = &systemmatrix_;
+
   const Teuchos::RCP<Epetra_Operator> J = systemmatrix_;
   const Teuchos::RCP<Epetra_Operator> M = systemmatrix_;
-  // std::cout<<*J<<std::endl;
-  std::cout << "J:" << *systemmatrix_ << std::endl;
-  std::cout << *rhs_ << std::endl;
 
   if (J.is_null()) dserror("Empty block matrix");
 
@@ -656,23 +651,6 @@ void POROELAST::Monolithic::SetupRHS(bool firstcall)
   nopen_handle_->ApplyCondRHS(iterinc_, rhs_);
 }
 
-void POROELAST::Monolithic::SetupRHS(Epetra_Vector& f, bool firstcall)
-{
-  // initialize f
-  f.PutScalar(0.0);
-
-  // call intial Setup_Function
-  SetupRHS(firstcall);
-
-  // update the solution vector
-  f.Update(1.0, *rhs_, 0.0);
-
-  // NOX expects the 'positive' residual. The negative sign for the
-  // linearized Newton system J*dx=-r is done internally by NOX.
-  // Since we assembled the right hand side, we have to invert the sign here.
-  // f.Scale(-1.);
-  dserror("Please do not call me!");
-}
 
 void POROELAST::Monolithic::PrepareTimeStep() { PoroBase::PrepareTimeStep(); }
 
@@ -680,64 +658,13 @@ bool POROELAST::Monolithic::computeF(
     const Epetra_Vector& x, Epetra_Vector& F, const FillType fillFlag)
 {
   TEUCHOS_FUNC_TIME_MONITOR("POROELAST::Monolithic::computeF");
-  // std::ostringstream oss;
-  // std::cout<<*iterinc_<<std::endl;
-  // EvaluateNOX(x, false);
-
-  std::cout << "computeF - x" << std::endl;
-  std::cout << x << std::endl;
-  Teuchos::RCP<Epetra_Vector> x2 = CORE::LINALG::CreateVector(*DofRowMap(), true);
-
-  x2->Update(1.0, x, 0);
-  F.PutScalar(0);
-  // EvaluateNOX(Teuchos::rcp(&x, false));
-  EvaluateNOX(x2);
+  EvaluateNOX(Teuchos::rcp(&x, false));
   SetupRHS();
-
   SetupSystemMatrix();
 
-
-  std::cout << "computeF - systemmatrix" << std::endl;
-  std::cout << *systemmatrix_ << std::endl;
-
-  // Teuchos::RCP<const Epetra_Vector> zeros = Teuchos::rcp(new const Epetra_Vector(rhs_->Map(),
-  // true));
-  // rhs_->Scale(-1.0);
-  // CORE::LINALG::ApplyDirichletToSystem(*rhs_, *zeros_, *(combinedDBCMap_));
-  // CORE::LINALG::ApplyDirichletToSystem(*systemmatrix_, *iterinc_, *rhs_, *zeros_,
-  // *CombinedDBCMap());
-  // F.Scale(-1.0);
   F.PutScalar(0.0);
-  // Extractor()->ExtractVector(rhs_, 1)->Scale(-1.0);s
   F.Update(1.0, *RHSNOX(), 0);
-  std::cout << "computeF - F" << std::endl;
-  std::cout << F << std::endl;
-  // TODO continue here
 
-  // F.Scale(-1.0);
-  //  std::cout<<F<<std::endl;
-  //  nox_prev_->Update(1.0, x, 0);
-
-
-  // SECOND WAY
-  // EvaluateNOX(Teuchos::rcp(&x, false));
-  // SetupRHS(F,false);
-  /*std::cout<<"x:"<<std::endl;
-  std::cout<<x<<std::endl;
-  iterinc_->Update(1.0,x,0);
-  iterinc_->Update(1.0,*nox_prev_,-1.0);
-  std::cout<<"iteration inc"<<std::endl;
-  std::cout<<*iterinc_<< std::endl;
-  Evaluate(iterinc_,true);
-  std::cout<<"system matrix"<<std::endl;
-  std::cout<<*systemmatrix_<< std::endl;
-  std::cout<<"right hand side"<<std::endl;
-  std::cout<<*rhs_<<std::endl;
-  //F.Update(-1.0,*rhs_,0);
-  nox_prev_->Update(1.0,x,0);
-
-
-  F.Update(-1.0,*rhs_,0.0);*/
   return true;
 }
 
@@ -764,18 +691,14 @@ void POROELAST::Monolithic::EvaluateNOX(Teuchos::RCP<const Epetra_Vector> x)
 
   return;
 }
-
-
 bool POROELAST::Monolithic::computeJacobian(const Epetra_Vector& x, Epetra_Operator& Jac)
 {
   TEUCHOS_FUNC_TIME_MONITOR("POROELAST::Monolithic::computeJacobian");
   EvaluateNOX(Teuchos::rcp(&x, false));
-  // Evaluate(Teuchos::rcp(&x, false),false);
   CORE::LINALG::BlockSparseMatrixBase& mat =
       Teuchos::dyn_cast<CORE::LINALG::BlockSparseMatrixBase>(Jac);
   SetupSystemMatrix();
   dserror("test");
-  // PrintBlockMatrixInMatlabFormat("mat.dat",mat);
   return true;
 }
 

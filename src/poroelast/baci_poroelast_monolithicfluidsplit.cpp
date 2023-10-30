@@ -74,6 +74,7 @@ void POROELAST::MonolithicFluidSplit::SetupSystem()
 
   SetupEquilibration();
 }
+/*
 void POROELAST::MonolithicFluidSplit::SetupRHS(Epetra_Vector& f, bool firstcall)
 {
   TEUCHOS_FUNC_TIME_MONITOR("POROELAST::MonolithicFluidSplit::SetupRHS");
@@ -154,7 +155,7 @@ void POROELAST::MonolithicFluidSplit::SetupRHS(Epetra_Vector& f, bool firstcall)
   fgcur_ = FluidField()->Interface()->ExtractFSICondVector(FluidField()->RHS());
   f.Update(-1.0, *rhs_, 0.0);
 }
-
+*/
 
 void POROELAST::MonolithicFluidSplit::SetupRHS(bool firstcall)
 {

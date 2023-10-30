@@ -91,7 +91,7 @@ Teuchos::RCP<POROELAST::PoroBase> POROELAST::UTILS::CreatePoroAlgorithm(
     case INPAR::POROELAST::Monolithic_fluidsplit:
     {
       // create an POROELAST::MonolithicFluidSplit instance
-      if (false)
+      if(false)
       {
         poroalgo =
             Teuchos::rcp(new POROELAST::MonolithicFluidSplit(comm, timeparams, porosity_splitter));

@@ -38,7 +38,7 @@ void poroelast_drt()
   Teuchos::RCP<POROELAST::PoroBase> poroalgo =
       POROELAST::UTILS::CreatePoroAlgorithm(poroelastdyn, comm);
 
-  if (false)
+  if(false)
   {
     // read the restart information, set vectors and variables
     const int restart = problem->Restart();

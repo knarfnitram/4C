@@ -54,8 +54,6 @@ namespace POROELAST
     //! setup composed system matrix from field solvers
     void SetupSystemMatrix(CORE::LINALG::BlockSparseMatrixBase& mat) override;
 
-    void SetupRHS(Epetra_Vector& f, bool firstcall);
-
    private:
     //! build block vector from field vectors
     void SetupVector(Epetra_Vector& f, Teuchos::RCP<const Epetra_Vector> sv,

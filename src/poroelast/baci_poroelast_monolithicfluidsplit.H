@@ -50,7 +50,6 @@ namespace POROELAST
     //! setup composed right hand side from field solvers
     void SetupRHS(bool firstcall = false) override;
 
-    void SetupRHS(Epetra_Vector& f, bool firstcall);
 
     //! setup composed system matrix from field solvers
     void SetupSystemMatrix(CORE::LINALG::BlockSparseMatrixBase& mat) override;

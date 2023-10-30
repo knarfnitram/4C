@@ -70,7 +70,8 @@ NOX::Abstract::Group::ReturnType NOX::POROELAST::Group::computeJacobian()
   {
     if (not isValidRHS)
     {
-      mporo_.SetupRHS(RHSVector.getEpetraVector(), false);
+      mporo_.SetupRHS(false);
+      RHSVector.getEpetraVector().Update(1.0, *mporo_.RHSNOX(), 0.0);
       isValidRHS = true;
     }
   }
