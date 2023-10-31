@@ -58,7 +58,7 @@ MAXTIME                         8
 NORMCOMBI_RESFINC               And
 NORM_INC                        AbsGlobal
 NORM_RESF                       AbsGlobal
-NUMSTEP                         10
+NUMSTEP                         1
 RESTARTEVRY                     5
 TOLRES_GLOBAL                   1e-06
 TOLINC_GLOBAL                   1e-06
