@@ -175,7 +175,6 @@ void POROELAST::Monolithic::Solve()
 
   //---------------------------------------- initialise equilibrium loop and norms
   SetupNewton();
-  // std::cout<<*iterinc_<<std::endl;
   //---------------------------------------------- iteration loop
   //  equilibrium iteration loop (loop over k)
   while (((not Converged()) and (iter_ <= itermax_)) or (iter_ <= itermin_))

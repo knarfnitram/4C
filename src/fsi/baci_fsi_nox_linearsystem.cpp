@@ -154,17 +154,12 @@ bool NOX::FSI::LinearSystem::applyJacobianInverse(
 
   Teuchos::RCP<Epetra_Vector> fres = Teuchos::rcp(new Epetra_Vector(input.getEpetraVector()));
   Teuchos::RCP<Epetra_Vector> disi = Teuchos::rcp(&(result.getEpetraVector()), false);
-  std::cout << "FSI_NOX_LINSYS_EVAL" << std::endl;
 
   //  get the hopefully adaptive linear solver convergence tolerance
   solver_->Params()
       .sublist("Belos Parameters")
       .set("Convergence Tolerance", p.get("Tolerance", 1.0e-15));
-  std::cout << "applyJacobianInverse - fres" << std::endl;
-  std::cout << *fres << std::endl;
   solver_->Solve(jacPtr_, disi, fres, false, callcount_ == 1);
-  std::cout << "applyJacobianInverse - disi" << std::endl;
-  std::cout << *disi << std::endl;
   callcount_ += 1;
 
   // Set the output parameters in the "Output" sublist

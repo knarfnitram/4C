@@ -265,17 +265,6 @@ void POROELAST::MonolithicFluidSplit::DoTimeStepNew(
   // Evaluate(zeros_, false);
   Evaluate(Teuchos::null, true);
   if (iterinc_.is_null()) iterinc_ = Teuchos::rcp(new Epetra_Vector(*DofRowMap(), true));
-  // EvaluateNOX(iterinc_);
-  // SetupRHS(true);
-  // std::cout<<*iterinc_<< std::endl;
-  // SetupRHS(true);
-  std::cout << *systemmatrix_ << std::endl;
-  std::cout << *rhs_ << std::endl;
-
-  // SetupSystemMatrix(*systemmatrix_);
-  std::cout << "After setupsystemmatrix" << std::endl;
-  std::cout << *systemmatrix_ << std::endl;
-  std::cout << *rhs_ << std::endl;
 
   // FluidField()->Evaluate(Teuchos::null);
   // StructureField()->Evaluate(Teuchos::null);
@@ -311,32 +300,17 @@ void POROELAST::MonolithicFluidSplit::DoTimeStepNew(
   if (zeros_.is_null()) zeros_ = Teuchos::rcp(new Epetra_Vector(*DofRowMap(), true));
   auto zeros_2 = Teuchos::rcp(new Epetra_Vector(*DofRowMap(), true));
 
-  // we know we already have the first linear system calculated
-  // SetupSolver();
 
-  std::cout << "systemmatrix_ in time step after dirichlet" << std::endl;
-  std::cout << *systemmatrix_ << std::endl;
 
   CORE::LINALG::ApplyDirichletToSystem(*systemmatrix_, *zeros_2, *rhs_, *zeros_, *CombinedDBCMap());
   grp->CaptureSystemState();
 
   std::ostringstream oss;
   if (grp->getF().length() == 0) dserror("well thats bad");
+
   // solve the whole thing
-
-
-  std::cout << "systemmatrix_ in time step (after diricht) " << std::endl;
-  std::cout << *systemmatrix_ << std::endl;
   noxstatus_ = solver->solve();
   noxiter_ = solver->getNumIterations();
-  grp->getX().print(oss);
-  // iterinc_->Update(1.0,grp->getX().createMultiVector(2,NOX::DeepCopy),0);
-  std::cout << oss.str() << std::endl;
-  // BuildConvergenceNorms();
-  // PrintNewtonIter();
-
-  // Newton-Raphson iteration
-  // Solve();
 
   // calculate stresses, strains, energies
   constexpr bool force_prepare = false;
