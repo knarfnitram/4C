@@ -323,7 +323,7 @@ Teuchos::RCP<NOX::Epetra::LinearSystem> POROELAST::Monolithic::CreateLinearSyste
 
   // TODO fix FSI::LinearSystem
   linSys = Teuchos::rcp(new NOX::FSI::LinearSystem(
-      printParams, lsParams, Teuchos::rcp(iJac, false), J, noxSoln, solver));
+      printParams, lsParams, Teuchos::rcp(iJac, false), systemmatrix_, noxSoln, solver));
 
 
   return linSys;
@@ -658,11 +658,32 @@ bool POROELAST::Monolithic::computeF(
 {
   TEUCHOS_FUNC_TIME_MONITOR("POROELAST::Monolithic::computeF");
   EvaluateNOX(Teuchos::rcp(&x, false));
-  SetupRHS();
-  SetupSystemMatrix();
 
+  SetupSystemMatrix();
+  SetupRHS();
+
+  // CORE::LINALG::ApplyDirichletToSystem(*systemmatrix_, F, *rhs_, *zeros_, *CombinedDBCMap());
   F.PutScalar(0.0);
+
+
+  // Finally, we take care of Dirichlet boundary conditions
+  // Teuchos::RCP<Epetra_Vector> rhs = Teuchos::rcp(new Epetra_Vector(F));
+  // Teuchos::RCP<const Epetra_Vector> zeros = Teuchos::rcp(new const Epetra_Vector(F.Map(), true));
+  CORE::LINALG::ApplyDirichletToSystem(*rhs_, *zeros_, *(CombinedDBCMap()));
+  // F.Update(1.0, *rhs, 0.0);
+
+
+
   F.Update(1.0, *RHSNOX(), 0);
+  /*std::cout<< "computeF_end:"<<std::endl;
+  std::cout<< "F"<<std::endl;
+  std::cout<< F<<std::endl;
+  std::cout<< "x"<<std::endl;
+  std::cout<< x<<std::endl;
+  std::cout<< "rhs"<<std::endl;
+  std::cout<< *rhs_<<std::endl;
+  std::cout<< "systemmatrix"<<std::endl;
+  std::cout<< *systemmatrix_<<std::endl;*/
 
   return true;
 }
@@ -731,13 +752,13 @@ void POROELAST::Monolithic::LinearSolve()
   iterinc_->PutScalar(0.0);  // Useful? depends on solver and more
 
   // equilibrate global system of equations if necessary
-  equilibration_->EquilibrateSystem(systemmatrix_, rhs_, blockrowdofmap_);
+  // equilibration_->EquilibrateSystem(systemmatrix_, rhs_, blockrowdofmap_);
 
   if (directsolve_)
   {
     // merge blockmatrix to SparseMatrix
     Teuchos::RCP<CORE::LINALG::SparseMatrix> sparse = systemmatrix_->Merge();
-
+    std::cout << "systemmatrix_ before solve " << std::endl;
     // apply dirichlet boundary conditions
     CORE::LINALG::ApplyDirichletToSystem(*sparse, *iterinc_, *rhs_, *zeros_, *CombinedDBCMap());
 
@@ -761,7 +782,7 @@ void POROELAST::Monolithic::LinearSolve()
     solver_->Solve(systemmatrix_->EpetraOperator(), iterinc_, rhs_, true, iter_ == 1);
   }
 
-  equilibration_->UnequilibrateIncrement(iterinc_);
+  // equilibration_->UnequilibrateIncrement(iterinc_);
 }
 
 void POROELAST::Monolithic::CreateLinearSolver()

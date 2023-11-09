@@ -262,10 +262,20 @@ void POROELAST::MonolithicFluidSplit::DoTimeStepNew(
   Teuchos::ParameterList& printParams = nlParams.sublist("Printing");
   printParams.set("MyPID", Comm().MyPID());
   zeros_ = CORE::LINALG::CreateVector(*DofRowMap(), true);
-  // Evaluate(zeros_, false);
-  Evaluate(Teuchos::null, true);
+  // Evaluate(Teuchos::null, true);
+  // Evaluate(zeros_,true);
+  rhs_ = Teuchos::rcp(new Epetra_Vector(*DofRowMap(), true));
+  EvaluateNOX(Teuchos::null);
+  SetupSystemMatrix(*systemmatrix_);
+  // SetupRHS();
+  std::cout << *zeros_ << std::endl;
+  // Evaluate(Teuchos::null, true);
   if (iterinc_.is_null()) iterinc_ = Teuchos::rcp(new Epetra_Vector(*DofRowMap(), true));
-
+  std::cout << *systemmatrix_ << std::endl;
+  if (zeros_.is_null()) zeros_ = Teuchos::rcp(new Epetra_Vector(*DofRowMap(), true));
+  auto zeros_2 = Teuchos::rcp(new Epetra_Vector(*DofRowMap(), true));
+  CORE::LINALG::ApplyDirichletToSystem(*systemmatrix_, *zeros_2, *rhs_, *zeros_, *CombinedDBCMap());
+  // std::cout << *rhs_ << std::endl;
   // FluidField()->Evaluate(Teuchos::null);
   // StructureField()->Evaluate(Teuchos::null);
   // EvaluateNOX(Teuchos::null);
@@ -297,14 +307,17 @@ void POROELAST::MonolithicFluidSplit::DoTimeStepNew(
 
   nox_prev_ = Teuchos::rcp(new Epetra_Vector(*DofRowMap(), true));
 
-  if (zeros_.is_null()) zeros_ = Teuchos::rcp(new Epetra_Vector(*DofRowMap(), true));
-  auto zeros_2 = Teuchos::rcp(new Epetra_Vector(*DofRowMap(), true));
 
 
+  // freopen("before dirichlet_systemmatrix_.txt","w",stdout);
+  std::cout << *systemmatrix_ << std::endl;
+  // freopen("before dirichlet_systemmatrix_.txt","w",stdout);
+  std::cout << *rhs_ << std::endl;
 
-  CORE::LINALG::ApplyDirichletToSystem(*systemmatrix_, *zeros_2, *rhs_, *zeros_, *CombinedDBCMap());
   grp->CaptureSystemState();
-
+  std::cout << "after dirichlet" << std::endl;
+  std::cout << *systemmatrix_ << std::endl;
+  std::cout << *rhs_ << std::endl;
   std::ostringstream oss;
   if (grp->getF().length() == 0) dserror("well thats bad");
 
@@ -313,6 +326,8 @@ void POROELAST::MonolithicFluidSplit::DoTimeStepNew(
   noxiter_ = solver->getNumIterations();
 
   // calculate stresses, strains, energies
+
+  RecoverLagrangeMultiplierAfterTimeStep();
   constexpr bool force_prepare = false;
   PrepareOutput(force_prepare);
 
@@ -343,10 +358,12 @@ void POROELAST::MonolithicFluidSplit::SetupSystemMatrix(CORE::LINALG::BlockSpars
   Teuchos::RCP<CORE::LINALG::BlockSparseMatrixBase> f = FluidField()->BlockSystemMatrix();
   if (f == Teuchos::null) dserror("expect fluid block matrix");
 
+
   mat.Matrix(0, 1).Zero();
   mat.Matrix(1, 0).Zero();
 #ifdef FLUIDSPLITAMG
   mat.Matrix(1, 1).Zero();
+  mat.Matrix(0, 0).Zero();
 #endif
 
   /*----------------------------------------------------------------------*/
@@ -428,14 +445,16 @@ void POROELAST::MonolithicFluidSplit::SetupSystemMatrix(CORE::LINALG::BlockSpars
   /*----------------------------------------------------------------------*/
   // done. make sure all blocks are filled.
   mat.Complete();
-
-
+  mat.Merge(true);
+  // std::cout<<"S:"<<std::endl;
+  // std::cout<<*s<<std::endl;
+  mat.ApplyDirichlet(*(combinedDBCMap_), true);
+  // std::cout<<"mat:"<<std::endl;
+  // std::cout<<mat<<std::endl;
   fgicur_ = Teuchos::rcp(new CORE::LINALG::SparseMatrix(f->Matrix(1, 0)));
   fggcur_ = Teuchos::rcp(new CORE::LINALG::SparseMatrix(f->Matrix(1, 1)));
   cgicur_ = Teuchos::rcp(new CORE::LINALG::SparseMatrix(k_fs->Matrix(1, 0)));
   cggcur_ = Teuchos::rcp(new CORE::LINALG::SparseMatrix(k_fs->Matrix(1, 1)));
-  mat.Merge(true);
-  mat.ApplyDirichlet(*(combinedDBCMap_), true);
 }
 
 void POROELAST::MonolithicFluidSplit::SetupVector(Epetra_Vector& f,
@@ -488,26 +507,28 @@ void POROELAST::MonolithicFluidSplit::ExtractFieldVectors(Teuchos::RCP<const Epe
 
     // Store field vectors to know them later on as previous quantities
     Teuchos::RCP<Epetra_Vector> sox = StructureField()->Interface()->ExtractOtherVector(sx);
-    if (solipre_ != Teuchos::null)
-      ddiinc_->Update(1.0, *sox, -1.0, *solipre_, 0.0);  // compute current iteration increment
-    else
-      ddiinc_ = Teuchos::rcp(new Epetra_Vector(*sox));  // first iteration increment
+    // if (solipre_ != Teuchos::null)
+    //   ddiinc_->Update(1.0, *sox, -1.0, *solipre_, 0.0);  // compute current iteration increment
+    // else
+    ddiinc_ = Teuchos::rcp(new Epetra_Vector(*sox));  // first iteration increment
 
     solipre_ = sox;  // store current step increment
 
-    if (solgvelpre_ != Teuchos::null)
-      duginc_->Update(1.0, *fcx, -1.0, *solgvelpre_, 0.0);  // compute current iteration increment
-    else
-      duginc_ = Teuchos::rcp(new Epetra_Vector(*fcx));  // first iteration increment
+    // if (solgvelpre_ != Teuchos::null)
+    //   duginc_->Update(1.0, *fcx, -1.0, *solgvelpre_, 0.0);  // compute current iteration
+    //   increment
+    // else
+    duginc_ = Teuchos::rcp(new Epetra_Vector(*fcx));  // first iteration increment
 
-    solgvelpre_ = fcx;  // store current step increment
+    // solgvelpre_ = fcx;  // store current step increment
 
-    if (solivelpre_ != Teuchos::null)
-      duiinc_->Update(1.0, *fox, -1.0, *solivelpre_, 0.0);  // compute current iteration increment
-    else
-      duiinc_ = Teuchos::rcp(new Epetra_Vector(*fox));  // first iteration increment
+    // if (solivelpre_ != Teuchos::null)
+    //   duiinc_->Update(1.0, *fox, -1.0, *solivelpre_, 0.0);  // compute current iteration
+    //   increment
+    // else
+    duiinc_ = Teuchos::rcp(new Epetra_Vector(*fox));  // first iteration increment
 
-    solivelpre_ = fox;  // store current step increment
+    // solivelpre_ = fox;  // store current step increment
   }
   else
     fx = Extractor()->ExtractVector(x, 1);

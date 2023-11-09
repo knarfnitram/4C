@@ -27,6 +27,7 @@ NOX::POROELAST::Group::Group(::POROELAST::Monolithic& mporo, Teuchos::ParameterL
  *----------------------------------------------------------------------*/
 void NOX::POROELAST::Group::CaptureSystemState()
 {
+  mporo_.SetupRHS();
   RHSVector.getEpetraVector().Update(1.0, *(mporo_.RHSNOX()), 0.0);
   sharedLinearSystem.getObject(this);
   isValidJacobian = true;

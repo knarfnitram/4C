@@ -1,0 +1,274 @@
+//
+//
+==================================================================
+General Data File BACI
+==================================================================
+-------------------------------------------------------------TITLE
+2D poro structure interaction problem testing
+- quad 9 elements
+- brinkman flow
+- fluid split
+------------------------------------------------------PROBLEM SIZE
+//ELEMENTS                      130
+//NODES                         567
+DIM                             2
+-------------------------------------------------------PROBLEM TYP
+PROBLEMTYP Poroelasticity
+RESTART                         0
+SHAPEFCT                        Polynomial
+-----------------------------------------------------FLUID DYNAMIC
+CALCERROR                       no
+GRIDVEL                         BE
+INITIALFIELD                    zero_field
+INITSTATITEMAX                  5
+ITEMAX                          10
+PREDICTOR                       steady_state
+THETA                           0.66
+TIMEINTEGR                      One_Step_Theta
+TIMESTEP                        0.01
+LINEAR_SOLVER                   3
+---------------------------FLUID DYNAMIC/POROUS-FLOW STABILIZATION
+CROSS-STRESS                    no_cross
+GRAD_DIV                        no
+DEFINITION_TAU                  Franca_Madureira_Valentin_Badia_Codina
+EVALUATION_MAT                  integration_point
+EVALUATION_TAU                  integration_point
+PSPG                            yes
+REYNOLDS-STRESS                 no_reynolds
+RSTAB                           rstab_gls
+STABTYPE                        residual_based
+SUPG                            no
+TDS                             quasistatic
+TRANSIENT                       no_transient
+VSTAB                           no_vstab
+--------------------------------------------POROELASTICITY DYNAMIC
+COUPALGO                        poro_monolithicfluidsplit
+PHYSICAL_TYPE                   Poro
+ITEMAX                          50
+ITEMIN                          1
+MAXTIME                         2000
+NORMCOMBI_RESFINC               And
+NORM_INC                        AbsGlobal
+NORM_RESF                       AbsGlobal
+NUMSTEP                         5
+RESTARTEVRY                     100
+TOLRES_GLOBAL                   1e-07
+TOLINC_GLOBAL                   1e-08
+VECTORNORM_RESF                 L2
+VECTORNORM_INC                  L2
+TIMESTEP                        0.01
+RESULTSEVRY                           1
+LINEAR_SOLVER                   1
+SECONDORDER                     yes
+CONTIPARTINT                    no
+----------------------------------------------------------SOLVER 1
+SOLVER                          UMFPACK
+----------------------------------------------------------SOLVER 2
+SOLVER                          UMFPACK
+----------------------------------------------------------SOLVER 3
+SOLVER                          UMFPACK
+------------------------------------------------STRUCTURAL DYNAMIC
+DAMPING                         Material
+DYNAMICTYP                      OneStepTheta
+PREDICT                         ConstDis
+LINEAR_SOLVER                   2
+-----------------------------------STRUCTURAL DYNAMIC/ONESTEPTHETA
+THETA                           0.66
+----------------------------------------------CLONING MATERIAL MAP
+SRC_FIELD structure SRC_MAT 1 TAR_FIELD porofluid TAR_MAT 3
+//SRC_FIELD structure SRC_MAT 1 TAR_FIELD scatra TAR_MAT 5
+---------------------------------------------------------MATERIALS
+MAT 1 MAT_StructPoro MATID 2 POROLAWID 10 INITPOROSITY 0.8
+MAT 10 MAT_PoroLawNeoHooke BULKMODULUS 2.0e2 PENALTYPARAMETER 0.001
+MAT 2 MAT_ElastHyper NUMMAT 1 MATIDS 4 DENS 1.1
+MAT 4 ELAST_CoupNeoHooke YOUNG 2.0e4 NUE 0.3
+MAT 3 MAT_FluidPoro DYNVISCOSITY 1.0 DENSITY 1.0 PERMEABILITY 1.0e1 TYPE Darcy-Brinkman
+------------------------------------------------------------FUNCT1
+COMPONENT 0 SYMBOLIC_FUNCTION_OF_SPACE_TIME a
+VARIABLE 0 NAME a TYPE multifunction NUMPOINTS 3 TIMES 0.0 1 500000.0 DESCRIPTION 0.5*(sin((t*pi/1.0)-(pi/2)))+0.5 1
+------------------------------------------------RESULT DESCRIPTION
+FLUID DIS porofluid NODE 4 QUANTITY velx VALUE  4.13479973047920293e-02 TOLERANCE 1e-7
+FLUID DIS porofluid NODE 34 QUANTITY vely VALUE -1.68360926066941141e-01 TOLERANCE 1e-7
+FLUID DIS porofluid NODE 65 QUANTITY pressure VALUE  1.09253919110209652e-01 TOLERANCE 1e-6
+STRUCTURE DIS structure NODE 2 QUANTITY dispy VALUE -2.83607105805816495e-03 TOLERANCE 1e-7
+STRUCTURE DIS structure NODE 3 QUANTITY dispy VALUE -2.41576737032587596e-03 TOLERANCE 1e-7
+STRUCTURE DIS structure NODE 4 QUANTITY dispy VALUE -2.44261856366099345e-03 TOLERANCE 1e-7
+STRUCTURE DIS structure NODE 4 QUANTITY vely VALUE -1.49942413052305101e-01 TOLERANCE 1e-7
+STRUCTURE DIS structure NODE 5 QUANTITY dispy VALUE -2.88004373505145773e-03 TOLERANCE 1e-7
+STRUCTURE DIS structure NODE 2 QUANTITY dispy VALUE -2.83607105805816495e-03 TOLERANCE 1e-7
+STRUCTURE DIS structure NODE 93 QUANTITY dispy VALUE -2.17489731629851328e-03 TOLERANCE 1e-7
+STRUCTURE DIS structure NODE 94 QUANTITY dispy VALUE -1.99726364534059606e-03 TOLERANCE 1e-7
+STRUCTURE DIS structure NODE 94 QUANTITY vely VALUE -1.29242663503418509e-01 TOLERANCE 1e-7
+STRUCTURE DIS structure NODE 95 QUANTITY dispy VALUE -2.19005514845106069e-03 TOLERANCE 1e-7
+------------------------------------------------DESIGN DESCRIPTION
+NDPOINT                         0
+NDLINE                          7
+NDSURF                          3
+NDVOL                           0
+-------------------------------------DESIGN LINE DIRICH CONDITIONS
+DLINE                           2
+//                              top
+E 2 - NUMDOF 2 ONOFF 1 1 VAL 0.0 -1.0 FUNCT 0 1
+//                              bottom
+E 3 - NUMDOF 2 ONOFF 1 1 VAL 0.0 0.0 FUNCT 0 0
+//                              structleft
+//E 4 - NUMDOF 2 ONOFF 1 0 VAL 0.0 0.0 FUNCT 0 0
+//                              structright
+//E 5 - NUMDOF 2 ONOFF 1 0 VAL 0.0 0.0 FUNCT 0 0
+-------------------------------------DESIGN SURF DIRICH CONDITIONS
+DSURF                           2
+//                              structsurf
+E 1 - NUMDOF 2 ONOFF 1 0 VAL 0.0 0.0 FUNCT 0 0
+//                              porosurf
+E 2 - NUMDOF 2 ONOFF 1 0 VAL 0.0 0.0 FUNCT 0 0
+-------------------------------DESIGN FSI COUPLING LINE CONDITIONS
+DLINE                           1
+//                              interface
+E 1 - 1 fluid conforming fsi_real
+//                              bottom
+//E 3 - 2 fluid conforming fsi_real
+-----------------------------DESIGN SURFACE POROCOUPLING CONDITION
+DSURF                           1
+//                              porosurf
+E 3 -
+--------------------------------DESIGN LINE PORO DIRICH CONDITIONS
+DLINE                           1
+//                              bottom
+E 3 - NUMDOF 3 ONOFF 1 1 0 VAL 0.0 0.0 0.0 FUNCT 0 0 0
+-----------------------------------------------DLINE-NODE TOPOLOGY
+NODE 1 DLINE 1
+NODE 2 DLINE 1
+NODE 5 DLINE 1
+NODE 10 DLINE 1
+NODE 12 DLINE 1
+NODE 16 DLINE 1
+NODE 18 DLINE 1
+NODE 22 DLINE 1
+NODE 24 DLINE 1
+NODE 28 DLINE 1
+NODE 30 DLINE 1
+NODE 34 DLINE 1
+NODE 36 DLINE 1
+NODE 40 DLINE 1
+NODE 42 DLINE 1
+NODE 46 DLINE 1
+NODE 48 DLINE 1
+NODE 52 DLINE 1
+NODE 54 DLINE 1
+NODE 58 DLINE 1
+NODE 60 DLINE 1
+NODE 526 DLINE 2
+NODE 527 DLINE 2
+NODE 529 DLINE 2
+NODE 532 DLINE 2
+NODE 534 DLINE 2
+NODE 536 DLINE 2
+NODE 538 DLINE 2
+NODE 540 DLINE 2
+NODE 542 DLINE 2
+NODE 544 DLINE 2
+NODE 546 DLINE 2
+NODE 548 DLINE 2
+NODE 550 DLINE 2
+NODE 552 DLINE 2
+NODE 554 DLINE 2
+NODE 556 DLINE 2
+NODE 558 DLINE 2
+NODE 560 DLINE 2
+NODE 562 DLINE 2
+NODE 564 DLINE 2
+NODE 566 DLINE 2
+NODE 400 DLINE 3
+NODE 401 DLINE 3
+NODE 403 DLINE 3
+NODE 406 DLINE 3
+NODE 408 DLINE 3
+NODE 410 DLINE 3
+NODE 412 DLINE 3
+NODE 414 DLINE 3
+NODE 416 DLINE 3
+NODE 418 DLINE 3
+NODE 420 DLINE 3
+NODE 422 DLINE 3
+NODE 424 DLINE 3
+NODE 426 DLINE 3
+NODE 428 DLINE 3
+NODE 430 DLINE 3
+NODE 432 DLINE 3
+NODE 434 DLINE 3
+NODE 436 DLINE 3
+NODE 438 DLINE 3
+NODE 440 DLINE 3
+NODE 58 DLINE 4
+NODE 443 DLINE 4
+NODE 446 DLINE 4
+NODE 485 DLINE 4
+NODE 488 DLINE 4
+NODE 527 DLINE 4
+NODE 530 DLINE 4
+NODE 1 DLINE 5
+NODE 480 DLINE 5
+NODE 481 DLINE 5
+NODE 522 DLINE 5
+NODE 523 DLINE 5
+NODE 564 DLINE 5
+NODE 565 DLINE 5
+NODE 58 DLINE 6
+NODE 59 DLINE 6
+NODE 61 DLINE 6
+NODE 102 DLINE 6
+NODE 103 DLINE 6
+NODE 144 DLINE 6
+NODE 145 DLINE 6
+NODE 186 DLINE 6
+NODE 187 DLINE 6
+NODE 228 DLINE 6
+NODE 229 DLINE 6
+NODE 270 DLINE 6
+NODE 271 DLINE 6
+NODE 312 DLINE 6
+NODE 313 DLINE 6
+NODE 354 DLINE 6
+NODE 355 DLINE 6
+NODE 396 DLINE 6
+NODE 397 DLINE 6
+NODE 438 DLINE 6
+NODE 439 DLINE 6
+NODE 1 DLINE 7
+NODE 4 DLINE 7
+NODE 8 DLINE 7
+NODE 65 DLINE 7
+NODE 68 DLINE 7
+NODE 107 DLINE 7
+NODE 110 DLINE 7
+NODE 149 DLINE 7
+NODE 152 DLINE 7
+NODE 191 DLINE 7
+NODE 194 DLINE 7
+NODE 233 DLINE 7
+NODE 236 DLINE 7
+NODE 275 DLINE 7
+NODE 278 DLINE 7
+NODE 317 DLINE 7
+NODE 320 DLINE 7
+NODE 359 DLINE 7
+NODE 362 DLINE 7
+NODE 401 DLINE 7
+NODE 404 DLINE 7
+-----------------------------------------------DSURF-NODE TOPOLOGY
+-------------------------------------------------------NODE COORDS
+NODE 1 COORD 5.0000000000000000e+00 5.0000000000000000e+00 0.0000000000000000e+00
+NODE 2 COORD 0.0000000000000000e+00 5.0000000000000000e+00 0.0000000000000000e+00
+NODE 3 COORD 0.0000000000000000e+00 0.0000000000000000e+00 0.0000000000000000e+00
+NODE 4 COORD 5.0000000000000000e+00 0.0000000000000000e+00 0.0000000000000000e+00
+NODE 5 COORD -5.0000000000000000e+00 5.0000000000000000e+00 0.0000000000000000e+00
+NODE 6 COORD -5.0000000000000000e+00 0.0000000000000000e+00 0.0000000000000000e+00
+NODE 7 COORD 0.0000000000000000e+00 -5.0000000000000000e+00 0.0000000000000000e+00
+NODE 8 COORD 5.0000000000000000e+00 -5.0000000000000000e+00 0.0000000000000000e+00
+NODE 9 COORD -5.0000000000000000e+00 -5.0000000000000000e+00 0.0000000000000000e+00
+------------------------------------------------STRUCTURE ELEMENTS
+1 WALLQ4PORO QUAD4 1 2 3 4 MAT 2 KINEM nonlinear EAS none THICK 0.1 STRESS_STRAIN plane_strain GP 2 2
+2 WALLQ4PORO QUAD4 2 5 6 3 MAT 2 KINEM nonlinear EAS none THICK 0.1 STRESS_STRAIN plane_strain GP 2 2
+3 WALLQ4PORO QUAD4 4 3 7 8 MAT 1 KINEM nonlinear EAS none THICK 0.1 STRESS_STRAIN plane_strain GP 2 2
+4 WALLQ4PORO QUAD4 3 6 9 7 MAT 1 KINEM nonlinear EAS none THICK 0.1 STRESS_STRAIN plane_strain GP 2 2
+---------------------------------------------------------------END

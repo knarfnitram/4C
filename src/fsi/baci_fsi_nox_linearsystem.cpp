@@ -158,9 +158,13 @@ bool NOX::FSI::LinearSystem::applyJacobianInverse(
   //  get the hopefully adaptive linear solver convergence tolerance
   solver_->Params()
       .sublist("Belos Parameters")
-      .set("Convergence Tolerance", p.get("Tolerance", 1.0e-15));
-  solver_->Solve(jacPtr_, disi, fres, false, callcount_ == 1);
+      .set("Convergence Tolerance", p.get("Tolerance", 1.0e-10));
+  solver_->Solve(jacPtr_, disi, fres, true, callcount_ == 1);
   callcount_ += 1;
+  /*std::cout<< "disi"<<std::endl;
+  std::cout<< *disi<<std::endl;
+  std::cout<< "fres"<<std::endl;
+  std::cout<< *fres<<std::endl;*/
 
   // Set the output parameters in the "Output" sublist
   if (outputSolveDetails_ or true)
