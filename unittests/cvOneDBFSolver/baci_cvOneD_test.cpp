@@ -12,7 +12,7 @@
 #include "baci_discretization_geometry_element_volume.H"
 
 #include <cvOneDSynchronizer.h>
-#include <OneDSolverv2.h>
+#include <OneDSolverInterface.h>
 #include <string.h>
 
 #include <fstream>
@@ -40,7 +40,7 @@ namespace
   TEST_F(OneDSolverTest, Setup)
   {
     // create model manager
-    OneDSolverv2 myOneDSolver = OneDSolverv2();
+    OneDSolverInterface myOneDSolver = OneDSolverInterface();
 
     // Create Solver Options of cvOneD
     cvOneDOptions* opts = new cvOneDOptions();
@@ -73,7 +73,7 @@ namespace
     // inputFile="/home/a11bmafr/software/baci/baci/unittests/cvOneDBFSolver/cv_velocity_Coupling.in";
 
     // create model manager
-    OneDSolverv2 myOneDSolver = OneDSolverv2();
+    OneDSolverInterface myOneDSolver = OneDSolverInterface();
 
     // Create Solver Options of cvOneD
     cvOneDOptions* opts = new cvOneDOptions();
