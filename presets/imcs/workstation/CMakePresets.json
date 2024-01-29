@@ -21,7 +21,8 @@
         "BACI_BUILD_DOXYGEN": "ON",
         "BACI_WITH_GOOGLETEST": "ON",
         "BACI_WITH_ARBORX": "ON",
-        "BACI_WITH_MIRCO": "ON"
+        "BACI_WITH_MIRCO": "ON",
+        "BACI_SVONEDSOLVER_ROOT": "/home/a11bmafr/software/SimVascular/install/"
       }
     },
     {
