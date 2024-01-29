@@ -1,0 +1,121 @@
+/*----------------------------------------------------------------------*/
+/*! \file
+
+\brief Unit tests to integrate cvOneDBFSolver to baci
+
+\level 1
+*/
+// End doxygen header.
+
+#include <gtest/gtest.h>
+
+#include "baci_discretization_geometry_element_volume.H"
+
+#include <cvOneDSynchronizer.h>
+#include <OneDSolverv2.h>
+#include <string.h>
+
+#include <fstream>
+#include <iostream>
+
+namespace
+{
+  using namespace BACI;
+
+
+  class OneDSolverTest : public ::testing::Test
+  {
+   protected:
+    void SetUp() override {}
+
+    //! testing parameters
+    static constexpr double TOL = 1.0e-4;
+
+    //! read input file
+    // TODO fix file path
+    string inputFile =
+        "/home/a11bmafr/software/baci/baci/unittests/cvOneDBFSolver/cv_velocity_Coupling.in";
+  };
+
+  TEST_F(OneDSolverTest, Setup)
+  {
+    // create model manager
+    OneDSolverv2 myOneDSolver = OneDSolverv2();
+
+    // Create Solver Options of cvOneD
+    cvOneDOptions* opts = new cvOneDOptions();
+
+    // Read Model From File
+    myOneDSolver.readModel(inputFile, opts);
+
+    // perform model check
+    opts->check();
+
+    // Create Model and Run Simulation
+    myOneDSolver.setupModelManager(opts);
+
+    // Delete Options
+    delete opts;
+
+    // currently this test does not anything to test?
+    // If the setup of the Model Manger fails, an error is generated and detected.
+  }
+
+
+  TEST_F(OneDSolverTest, cvOneDSynchronizer)
+  {
+    // This is a small integration test to check if the velocity is right set and evaluated in the
+    // one d artery library
+
+    // read input file
+    // TODO fix file path
+    // string
+    // inputFile="/home/a11bmafr/software/baci/baci/unittests/cvOneDBFSolver/cv_velocity_Coupling.in";
+
+    // create model manager
+    OneDSolverv2 myOneDSolver = OneDSolverv2();
+
+    // Create Solver Options of cvOneD
+    cvOneDOptions* opts = new cvOneDOptions();
+
+    // Read Model From File
+    myOneDSolver.readModel(inputFile, opts);
+
+    // perform model check
+    opts->check();
+
+    const double dt = 0.01;
+    const int steps = 10;
+    // create the Synchronizer for data coupling
+    cvOneDSynchronizer* pSynchronizer = new cvOneDSynchronizer(steps + 1, dt);
+    cvOneDSynchronizer* mysync = pSynchronizer;
+
+    // Set the 3d coupling values at the time steps
+    for (int i = 1; i < steps; ++i)
+    {
+      mysync->Set_3d_q_at_t(dt * i, 0.002 * i);
+    }
+
+    // Create Model and Run Simulation
+    myOneDSolver.createAndRunModel(opts, *mysync);
+
+    // Delete Options
+    delete opts;
+
+    // test if we have written back the solution
+    // values can be found in velocity_CouplingARTERY_pressure.dat
+    // they should correspond to the first row exept the first entry since the initial state is not
+    // extracted?
+    std::array<double, steps> solution{{0.0, 112773.79784974219, 109676.68791493628,
+        100722.24699280947, 83542.696068952733, 57956.489380590065, 26243.264610449332,
+        -7495.9862413965748, -38436.425457495294, -77023.547305151558}};
+
+    // compare the results
+    for (int i = 0; i < steps; ++i)
+    {
+      EXPECT_NEAR(solution[i], mysync->Get_1d_p_at_t(i * dt), OneDSolverTest::TOL);
+    }
+  }
+
+
+}  // namespace
