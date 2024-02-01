@@ -50,13 +50,39 @@ namespace
     opts->check();
 
     // Create Model and Run Simulation
-    myOneDSolver.setupModelManager(opts);
+    // myOneDSolver.setupModelManager(opts);
 
     // Delete Options
     delete opts;
 
     // currently this test does not anything to test?
     // If the setup of the Model Manger fails, an error is generated and detected.
+  }
+
+  TEST_F(OneDSolverTest, SetupuntilNewton)
+  {
+    // create model manager
+    OneDSolverInterface myOneDSolver = OneDSolverInterface();
+
+    // Create Solver Options of cvOneD
+    cvOneDOptions* opts = new cvOneDOptions();
+
+    // Read Model From File
+    myOneDSolver.readModel(inputFile, opts);
+
+    // perform model check
+    opts->check();
+
+    // set up dummy synch
+    cvOneDSynchronizer* pSynchronizer = new cvOneDSynchronizer();
+    // Create Model and Run Simulation
+    myOneDSolver.setupModeluntilNewton(opts, pSynchronizer);
+
+    myOneDSolver.UpdateTimeStep();
+    int iter = 0;
+    int step = 1;
+    myOneDSolver.Do_Newton_Step(&iter);
+    myOneDSolver.UpdateSolution(iter, step);
   }
 
 
@@ -81,16 +107,15 @@ namespace
     const int steps = 10;
     // create the Synchronizer for data coupling
     cvOneDSynchronizer* pSynchronizer = new cvOneDSynchronizer(steps + 1, dt);
-    cvOneDSynchronizer* mysync = pSynchronizer;
 
     // Set the 3d coupling values at the time steps
     for (int i = 1; i < steps; ++i)
     {
-      mysync->Set_3d_q_at_t(dt * i, 0.002 * i);
+      pSynchronizer->Set_3d_q_at_t(dt * i, 0.002 * i);
     }
 
     // Create Model and Run Simulation
-    myOneDSolver.createAndRunModel(opts, *mysync);
+    myOneDSolver.createAndRunModel(opts, pSynchronizer);
 
     // Delete Options
     delete opts;
@@ -106,9 +131,10 @@ namespace
     // compare the results
     for (int i = 0; i < steps; ++i)
     {
-      EXPECT_NEAR(solution[i], mysync->Get_1d_p_at_t(i * dt), OneDSolverTest::TOL);
+      EXPECT_NEAR(solution[i], pSynchronizer->Get_1d_p_at_t(i * dt), OneDSolverTest::TOL);
     }
   }
+
 
 
 }  // namespace

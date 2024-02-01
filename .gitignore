@@ -82,6 +82,8 @@ doc/readthedocs-config/baci-python-rtd-venv
 
 # CLion
 .idea/
+cmake-build-imcs_workstation/
+cmake-build-imcs_workstation_debug/
 
 # clangd
 .clangd
