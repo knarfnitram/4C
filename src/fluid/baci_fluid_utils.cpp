@@ -922,7 +922,33 @@ std::map<int, double> FLD::UTILS::ComputeMeanPressure(DRT::Discretization& dis,
     const Teuchos::RCP<Epetra_Vector>& velnp, const std::string& condstring,
     const INPAR::FLUID::PhysicalType physicaltype)
 {
+  std::vector<DRT::Condition*> conds_pressure;
+  dis.GetCondition(condstring, conds_pressure);
+
   Teuchos::ParameterList eleparams;
+
+  eleparams.set<int>("action", FLD::calc_pressure_bou_int);
+  eleparams.set<double>("pressure boundary integral", 0.0);
+
+  // set required state vectors
+  dis.ClearState();
+  // SetStateTimInt();
+  // if (alefluid_) dis->SetState(ndsale_, "dispnp", dispnp_);
+  dis.SetState("velaf", velnp);
+  // evaluate pressure integral
+  dis.EvaluateCondition(eleparams, condstring, conds_pressure[0]->GetInt("ConditionID"));
+  // dis.EvaluateCondition(eleparams, condstring, conds);
+  dis.ClearState();
+  // sum up local pressure integral on this processor
+  double localpressint = eleparams.get<double>("pressure boundary integral");
+  std::cout << localpressint << std::endl;
+  // sum up global pressure integral over all processors
+  double pressint = 0.0;
+  dis.Comm().SumAll(&localpressint, &pressint, 1);
+
+  // clear state
+  dis.ClearState();
+
 
   // set action for elements
   eleparams.set<int>("action", FLD::calc_area);
@@ -945,7 +971,7 @@ std::map<int, double> FLD::UTILS::ComputeMeanPressure(DRT::Discretization& dis,
 
     // call loop over elements
     dis.ClearState();
-    // dis.SetState("velaf", velnp);
+    //
     dis.EvaluateCondition(eleparams, condstring, condID);
 
     double local_area = eleparams.get<double>("area");
