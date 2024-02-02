@@ -518,6 +518,14 @@ namespace FLD
             dispnp,  ///< solution vector with mesh displacements (ALE)
         const INPAR::FLUID::PhysicalType physicaltype  ///< physical type of flow
     );
+    std::map<int, double> ComputeMeanPressure(
+        DRT::Discretization& dis,  ///< the discretisation (node distribution, conditions)
+        const Teuchos::RCP<Epetra_Vector>&
+            velnp,                      ///< solution vector with velocities (and pressure)
+        const std::string& condstring,  ///< name of the condition (LineFlowRate or SurfaceFlowRate)
+        const INPAR::FLUID::PhysicalType physicaltype  ///< physical type of flow
+    );
+
 
     /*!
      * \brief proc 0 writes the flow rate values for each condition ID to a file

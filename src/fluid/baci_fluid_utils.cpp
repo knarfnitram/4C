@@ -918,6 +918,64 @@ std::map<int, double> FLD::UTILS::ComputeFlowRates(DRT::Discretization& dis,
   return volumeflowrateperline;
 }
 
+std::map<int, double> FLD::UTILS::ComputeMeanPressure(DRT::Discretization& dis,
+    const Teuchos::RCP<Epetra_Vector>& velnp, const std::string& condstring,
+    const INPAR::FLUID::PhysicalType physicaltype)
+{
+  Teuchos::ParameterList eleparams;
+  // set action for elements
+  eleparams.set<int>("action", FLD::calc_area);
+  eleparams.set<int>("Physical Type", physicaltype);
+  // set initial value for area
+  eleparams.set<double>("area", 0.0);
+
+  // note that the flowrate is not yet divided by the area
+  std::map<int, double> volumeflowrateperline;
+
+  // get condition
+  std::vector<DRT::Condition*> conds;
+  dis.GetCondition(condstring, conds);
+
+  // each condition is on every proc , but might not have condition elements there
+  for (std::vector<DRT::Condition*>::const_iterator conditer = conds.begin();
+       conditer != conds.end(); ++conditer)
+  {
+    const DRT::Condition* cond = *conditer;
+    const int condID = cond->GetInt("ConditionID");
+
+    // get a vector layout from the discretization to construct matching
+    // vectors and matrices local <-> global dof numbering
+    const Epetra_Map* dofrowmap = dis.DofRowMap();
+
+    // create vector (+ initialization with zeros)
+    Teuchos::RCP<Epetra_Vector> flowrates = CORE::LINALG::CreateVector(*dofrowmap, true);
+
+    // call loop over elements
+    dis.ClearState();
+
+    dis.SetState("velaf", velnp);
+
+    // dis.SetState("dispnp", Teuchos::null);
+    // dis.SetState("gridv", Teuchos::null);
+    dis.EvaluateCondition(eleparams, condstring, condID);
+
+    // double local_area = 0.0;
+
+    double local_area = eleparams.get<double>("area");
+    // eleparams.get("area",local_area);
+    dis.ClearState();
+    double flowrate = 0.0;
+    dofrowmap->Comm().SumAll(&local_area, &flowrate, 1);
+
+    if (dofrowmap->Comm().MyPID() == 0)
+      std::cout << "gobal area = " << flowrate << "\t condition ID = " << condID << std::endl;
+
+    // ATTENTION: new definition: outflow is positive and inflow is negative
+    volumeflowrateperline[condID] = flowrate;
+  }
+  return volumeflowrateperline;
+}
+
 /*----------------------------------------------------------------------*
  *----------------------------------------------------------------------*/
 std::map<int, double> FLD::UTILS::ComputeVolume(DRT::Discretization& dis,

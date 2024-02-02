@@ -5193,10 +5193,14 @@ void FLD::FluidImplicitTimeInt::ComputeFlowRates() const
   {
     const std::map<int, double> flowrates =
         FLD::UTILS::ComputeFlowRates(*discret_, velnp_, condstring, physicaltype_);
+    const std::map<int, double> meanPressure =
+        FLD::UTILS::ComputeMeanPressure(*discret_, velnp_, condstring, physicaltype_);
 
     // write to file
     if (discret_->Comm().MyPID() == 0)
       FLD::UTILS::WriteDoublesToFile(time_, step_, flowrates, "flowrate");
+    if (discret_->Comm().MyPID() == 0)
+      FLD::UTILS::WriteDoublesToFile(time_, step_, meanPressure, "meanPressure");
   }
 }
 
