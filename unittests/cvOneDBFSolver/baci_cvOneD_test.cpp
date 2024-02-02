@@ -136,5 +136,78 @@ namespace
   }
 
 
+  TEST_F(OneDSolverTest, partitioned)
+  {
+    double q_1d = 0;
+    double q_3d = 0;
+    double p_3d = 0;
+    double p_1d = 0;
+    double t = 0;
+    double t_end = 1;
+    double tol = 0.03;
+
+    // Initialize the OneDSolver
+    // create model manager
+    OneDSolverInterface myOneDSolver = OneDSolverInterface();
+
+    // Create Solver Options of cvOneD
+    cvOneDOptions* opts = new cvOneDOptions();
+
+    // Read Model From File
+    myOneDSolver.readModel(inputFile, opts);
+
+    // perform model check
+    opts->check();
+
+    const double dt = 0.01;
+    const int steps = 10;
+    // create the Synchronizer for data coupling
+    cvOneDSynchronizer* pSynchronizer = new cvOneDSynchronizer(steps + 1, dt);
+
+    // Create Model and Run Simulation
+    myOneDSolver.setupModeluntilNewton(opts, pSynchronizer);
+
+    myOneDSolver.UpdateTimeStep();
+    // for every time step
+    //  while(t < t_end) {
+
+    //
+    //      while (abs(q_3d - q_1d) > tol and abs(p_3d - p_1d) > tol) {
+
+
+
+    // set pressure in simulation
+
+    // perform baci solve
+
+    // get outflow q3d and p3d
+
+
+    // set q_1d simulation from q_3d
+
+    int iter = 0;
+    int time_step = 0;
+    while (true)
+    {
+      // Newton-Raphson Iterations...
+      if (!myOneDSolver.Do_Newton_Step(&iter))
+      {
+        break;
+      }
+
+
+    }  // End while
+    myOneDSolver.SynchronizeDataofStep(time_step);
+
+    // get p_1d
+
+
+
+    //     itermaxx++;
+  }
+
+}
+}
+
 
 }  // namespace
