@@ -920,44 +920,16 @@ std::map<int, double> FLD::UTILS::ComputeFlowRates(DRT::Discretization& dis,
   return volumeflowrateperline;
 }
 
+
 std::map<int, double> FLD::UTILS::ComputeMeanPressure(DRT::Discretization& dis,
     const Teuchos::RCP<Epetra_Vector>& velnp, const std::string& condstring,
     const INPAR::FLUID::PhysicalType physicaltype)
 {
-  std::vector<DRT::Condition*> conds_pressure;
-  dis.GetCondition(condstring, conds_pressure);
-
-  Teuchos::ParameterList eleparams;
-
-  eleparams.set<int>("action", FLD::calc_pressure_bou_int);
-  eleparams.set<double>("pressure boundary integral", 0.0);
-
-  // set required state vectors
-  dis.ClearState();
-  // SetStateTimInt();
-  // if (alefluid_) dis->SetState(ndsale_, "dispnp", dispnp_);
-  dis.SetState("velaf", velnp);
-  // evaluate pressure integral
-  dis.EvaluateCondition(eleparams, condstring, conds_pressure[0]->GetInt("ConditionID"));
-  // dis.EvaluateCondition(eleparams, condstring, conds);
-  dis.ClearState();
-  // sum up local pressure integral on this processor
-  double localpressint = eleparams.get<double>("pressure boundary integral");
-  std::cout << localpressint << std::endl;
-  // sum up global pressure integral over all processors
-  double pressint = 0.0;
-  dis.Comm().SumAll(&localpressint, &pressint, 1);
-
-  // clear state
-  dis.ClearState();
-
-
-  // set action for elements
-  eleparams.set<int>("action", FLD::calc_area);
-  eleparams.set<int>("Physical Type", physicaltype);
-
   // set up map with areas
   std::map<int, double> global_area;
+  // set up map with global integrated pressure
+  std::map<int, double> global_pressure;
+  std::map<int, double> global_mean_pressure;
 
   // get condition
   std::vector<DRT::Condition*> conds;
@@ -967,26 +939,56 @@ std::map<int, double> FLD::UTILS::ComputeMeanPressure(DRT::Discretization& dis,
   for (std::vector<DRT::Condition*>::const_iterator conditer = conds.begin();
        conditer != conds.end(); ++conditer)
   {
-    eleparams.set<double>("area", 0.0);
     const DRT::Condition* cond = *conditer;
     const int condID = cond->GetInt("ConditionID");
 
-    // call loop over elements
-    dis.ClearState();
-    //
-    dis.EvaluateCondition(eleparams, condstring, condID);
+    Teuchos::ParameterList eleparams;
 
-    double local_area = eleparams.get<double>("area");
+    // Set eleparameters to calculate the pressure integral
+    eleparams.set<int>("action", FLD::calc_pressure_bou_int);
+    eleparams.set<double>("pressure boundary integral", 0.0);
+
+    // set required state vectors
+    dis.ClearState();
+    // SetStateTimInt();
+    dis.SetState("velaf", velnp);
+    // evaluate pressure integral
+    dis.EvaluateCondition(eleparams, condstring, cond->GetInt("ConditionID"));
+
+    dis.ClearState();
+    // sum up local pressure integral on this processor
+    double localpressint = eleparams.get<double>("pressure boundary integral");
+    // sum up global pressure integral over all processors
+    double pressint = 0.0;
+    dis.Comm().SumAll(&localpressint, &pressint, 1);
+    global_pressure[condID] = pressint;
+    // clear state
+    dis.ClearState();
+    Teuchos::ParameterList eleparams_area;
+    // set action for elements
+    eleparams_area.set<int>("action", FLD::calc_area);
+    eleparams_area.set<int>("Physical Type", physicaltype);
+    eleparams_area.set<double>("area", 0.0);
+
+
+    // clear state
+    dis.ClearState();
+    dis.EvaluateCondition(eleparams_area, condstring, condID);
+
+    double local_area = eleparams_area.get<double>("area");
     dis.ClearState();
     double area = 0.0;
     dis.DofRowMap()->Comm().SumAll(&local_area, &area, 1);
 
-    if (dis.DofRowMap()->Comm().MyPID() == 0)
-      std::cout << "gobal area = " << area << "\t condition ID = " << condID << std::endl;
-
     global_area[condID] = area;
+    global_mean_pressure[condID] = pressint / area;
+
+    if (dis.DofRowMap()->Comm().MyPID() == 0)
+      std::cout << "gobal area = " << global_area[condID] << "\t condition ID = " << condID
+                << "mean pressure " << global_mean_pressure[condID] << std::endl;
   }
-  return global_area;
+
+  return global_mean_pressure;
 }
 
 /*----------------------------------------------------------------------*
