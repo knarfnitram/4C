@@ -74,6 +74,8 @@ ale/                       @baci/team_fluid
 
 art_net/                   @baci/team_reduced_fluid_models
 
+artery_cvOneDBF/           @baci/team_fluid
+
 beam3/                     @baci/team_structure
 
 beamcontact/               @baci/team_structure
