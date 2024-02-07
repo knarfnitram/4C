@@ -1,6 +1,7 @@
 add_subdirectory(adapter)
 add_subdirectory(ale)
 add_subdirectory(art_net)
+add_subdirectory(artery_cvOneDBF)
 add_subdirectory(beam3)
 add_subdirectory(beamcontact)
 add_subdirectory(beaminteraction)
