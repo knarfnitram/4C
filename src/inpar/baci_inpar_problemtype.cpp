@@ -69,6 +69,7 @@ std::map<std::string, GLOBAL::ProblemType> INPAR::PROBLEMTYPE::StringToProblemTy
     // problem types in alphabetical order
     string2prbtype["Ale"] = GLOBAL::ProblemType::ale;
     string2prbtype["ArterialNetwork"] = GLOBAL::ProblemType::art_net;
+    string2prbtype["Arterial_Network_Fluid_Coupling"] = GLOBAL::ProblemType::art_cv;
     string2prbtype["Atherosclerosis_Fluid_Structure_Interaction"] = GLOBAL::ProblemType::ac_fsi;
     string2prbtype["Biofilm_Fluid_Structure_Interaction"] = GLOBAL::ProblemType::biofilm_fsi;
     string2prbtype["Cardiac_Monodomain"] = GLOBAL::ProblemType::cardiac_monodomain;
