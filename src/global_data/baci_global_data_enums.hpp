@@ -19,8 +19,9 @@ namespace GLOBAL
    */
   enum class ProblemType
   {
-    none,                // not a problem at all
-    ac_fsi,              // atherosclerosis growth/multiscale problem
+    none,    // not a problem at all
+    ac_fsi,  // atherosclerosis growth/multiscale problem
+    art_cv,
     ale,                 // pure ale problem
     art_net,             // arterial network problem _1D_ARTERY_
     biofilm_fsi,         // biofilm growth problem

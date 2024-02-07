@@ -558,7 +558,8 @@ void ADAPTER::FluidBaseAlgorithm::SetupFluid(const Teuchos::ParameterList& prbdy
   if (nullptr != actdis->GetCondition("VolumetricSurfaceFlowCond"))
   {
     if (not(GLOBAL::ProblemType::fluid_redmodels == probtype or
-            GLOBAL::ProblemType::fsi_redmodels == probtype))
+            GLOBAL::ProblemType::fsi_redmodels == probtype or
+            GLOBAL::ProblemType::art_cv == probtype))
     {
       dserror(
           "ERROR: Given Volumetric Womersly infow condition only works with Problemtyp "
@@ -704,6 +705,8 @@ void ADAPTER::FluidBaseAlgorithm::SetupFluid(const Teuchos::ParameterList& prbdy
           dserror("Unknown time integration for this fluid problem type\n");
       }
       break;
+
+      case GLOBAL::ProblemType::art_cv:
       case GLOBAL::ProblemType::fluid_redmodels:
       {
         if (timeint == INPAR::FLUID::timeint_stationary)

@@ -349,6 +349,7 @@ void GLOBAL::ReadFields(GLOBAL::Problem& problem, INPUT::DatFileReader& reader, 
       break;
     }
     case GLOBAL::ProblemType::fluid:
+    case GLOBAL::ProblemType::art_cv:
     case GLOBAL::ProblemType::fluid_redmodels:
     {
       if (distype == CORE::FE::ShapeFunctionType::hdg)
@@ -392,8 +393,7 @@ void GLOBAL::ReadFields(GLOBAL::Problem& problem, INPUT::DatFileReader& reader, 
       meshreader.AddAdvancedReader(fluiddis, reader, "FLUID",
           INPUT::IntegralValue<INPAR::GeometryType>(problem.FluidDynamicParams(), "GEOMETRY"),
           nullptr);
-
-      break;
+      q break;
     }
     case GLOBAL::ProblemType::lubrication:
     {
@@ -1712,6 +1712,7 @@ void GLOBAL::ReadParameter(GLOBAL::Problem& problem, INPUT::DatFileReader& reade
 {
   Teuchos::RCP<Teuchos::ParameterList> list = Teuchos::rcp(new Teuchos::ParameterList("DAT FILE"));
 
+<<<<<<< HEAD:src/global_data/baci_global_data_read.cpp
   reader.ReadSection("--DISCRETISATION", *list);
   reader.ReadSection("--PROBLEM SIZE", *list);
   reader.ReadSection("--PROBLEM TYP", *list);
@@ -1852,6 +1853,313 @@ void GLOBAL::ReadParameter(GLOBAL::Problem& problem, INPUT::DatFileReader& reade
   reader.ReadSection("--CARDIAC MONODOMAIN CONTROL", *list);
   reader.ReadSection("--MOR", *list);
   reader.ReadSection("--MESH PARTITIONING", *list);
+=======
+  meshreader.AddElementReader(INPUT::ElementReader(scatradis, reader, "--TRANSPORT ELEMENTS"));
+  break;
+}
+case ProblemType::np_support:
+{
+  // no discretizations and nodes needed for supporting procs
+  break;
+}
+case ProblemType::elemag:
+{
+  // create empty discretizations
+  elemagdis = Teuchos::rcp(new DRT::DiscretizationHDG("elemag", reader.Comm()));
+
+  // create discretization writer - in constructor set into and owned by corresponding discret
+  elemagdis->SetWriter(Teuchos::rcp(new IO::DiscretizationWriter(elemagdis)));
+
+  AddDis("elemag", elemagdis);
+
+  std::set<std::string> elemagelementtypes;
+  elemagelementtypes.insert("ELECTROMAGNETIC");
+  elemagelementtypes.insert("ELECTROMAGNETICDIFF");
+
+  meshreader.AddElementReader(
+      INPUT::ElementReader(elemagdis, reader, "--ELECTROMAGNETIC ELEMENTS", elemagelementtypes));
+
+  break;
+}
+case ProblemType::redairways_tissue:
+{
+  // create empty discretizations
+  structdis = Teuchos::rcp(new DRT::Discretization("structure", reader.Comm()));
+  airwaydis = Teuchos::rcp(new DRT::Discretization("red_airway", reader.Comm()));
+
+  // create discretization writer - in constructor set into and owned by corresponding discret
+  structdis->SetWriter(Teuchos::rcp(new IO::DiscretizationWriter(structdis)));
+  airwaydis->SetWriter(Teuchos::rcp(new IO::DiscretizationWriter(airwaydis)));
+
+  AddDis("structure", structdis);
+  AddDis("red_airway", airwaydis);
+
+  meshreader.AddElementReader(INPUT::ElementReader(structdis, reader, "--STRUCTURE ELEMENTS"));
+  meshreader.AddElementReader(
+      INPUT::ElementReader(airwaydis, reader, "--REDUCED D AIRWAYS ELEMENTS"));
+  break;
+}
+default:
+  dserror("Unknown problem type: %d", GetProblemType());
+  break;
+  }
+
+  // add artery or airways discretizations only for the following problem types
+  switch (GetProblemType())
+  {
+    case ProblemType::fsi_redmodels:
+    case ProblemType::fsi_lung:
+    case ProblemType::fluid_ale:
+    case ProblemType::fluid_redmodels:
+    {
+      if (distype == CORE::FE::ShapeFunctionType::polynomial)
+      {
+        // create empty discretizations
+        arterydis = Teuchos::rcp(new DRT::Discretization("artery", reader.Comm()));
+        // create discretization writer - in constructor set into and owned by corresponding discret
+        arterydis->SetWriter(Teuchos::rcp(new IO::DiscretizationWriter(arterydis)));
+        AddDis("artery", arterydis);
+        meshreader.AddElementReader(INPUT::ElementReader(arterydis, reader, "--ARTERY ELEMENTS"));
+
+        airwaydis = Teuchos::rcp(new DRT::Discretization("red_airway", reader.Comm()));
+        // create discretization writer - in constructor set into and owned by corresponding discret
+        airwaydis->SetWriter(Teuchos::rcp(new IO::DiscretizationWriter(airwaydis)));
+        AddDis("red_airway", airwaydis);
+        meshreader.AddElementReader(
+            INPUT::ElementReader(airwaydis, reader, "--REDUCED D AIRWAYS ELEMENTS"));
+      }
+    }
+    break;
+    default:
+      break;
+  }
+
+  if (readmesh)  // now read and allocate!
+  {
+    // we read nodes and elements for the desired fields as specified above
+    meshreader.ReadAndPartition();
+
+    CORE::COMM::NestedParallelismType npType =
+        DRT::Problem::Instance()->GetCommunicators()->NpType();
+    // care for special applications
+    switch (GetProblemType())
+    {
+      case ProblemType::elch:
+      case ProblemType::fsi:
+      case ProblemType::fsi_redmodels:
+      case ProblemType::fsi_lung:
+      case ProblemType::scatra:
+      case ProblemType::structure:
+      {
+        // read microscale fields from second, third, ... input file if necessary
+        // (in case of multi-scale material models)
+        if (npType != CORE::COMM::NestedParallelismType::copy_dat_file) ReadMicroFields(reader);
+        break;
+      }
+      case ProblemType::np_support:
+      {
+        // read microscale fields from second, third, ... inputfile for supporting processors
+        ReadMicrofieldsNPsupport();
+        break;
+      }
+      default:
+        break;
+    }
+  }  // if(readmesh)
+  }
+
+
+  /*----------------------------------------------------------------------*/
+  /*----------------------------------------------------------------------*/
+  void DRT::Problem::ReadMicroFields(INPUT::DatFileReader& reader)
+  {
+    // check whether micro material is specified
+    const int id_struct =
+        DRT::Problem::Instance()->Materials()->FirstIdByType(INPAR::MAT::m_struct_multiscale);
+    const int id_scatra =
+        DRT::Problem::Instance()->Materials()->FirstIdByType(INPAR::MAT::m_scatra_multiscale);
+    const int id_elch =
+        DRT::Problem::Instance()->Materials()->FirstIdByType(INPAR::MAT::m_newman_multiscale);
+
+    // return if no multiscale material is used
+    if (id_struct == -1 and id_scatra == -1 and id_elch == -1) return;
+
+    // safety check
+    if ((id_struct != -1 and id_scatra != -1) or (id_struct != -1 and id_elch != -1) or
+        (id_scatra != -1 and id_elch != -1))
+      dserror("Cannot have more than one multi-scale material!");
+
+    // store name of macro-scale discretization in string
+    std::string macro_dis_name("");
+    if (id_struct != -1)
+      macro_dis_name = "structure";
+    else
+      macro_dis_name = "scatra";
+
+    // fetch communicators
+    Teuchos::RCP<Epetra_Comm> lcomm = communicators_->LocalComm();
+    Teuchos::RCP<Epetra_Comm> gcomm = communicators_->GlobalComm();
+
+    DRT::Problem* macro_problem = DRT::Problem::Instance();
+    Teuchos::RCP<DRT::Discretization> macro_dis = macro_problem->GetDis(macro_dis_name);
+
+    // repartition macro problem for a good distribution of elements with micro material
+    if (macro_dis_name == "structure")
+    {
+      // do weighted repartitioning to obtain new row/column maps
+      const Teuchos::ParameterList rebalanceParams;
+      Teuchos::RCP<const Epetra_CrsGraph> nodeGraph = macro_dis->BuildNodeGraph();
+      const auto& [nodeWeights, edgeWeights] = CORE::REBALANCE::BuildWeights(*macro_dis);
+      const auto& [rownodes, colnodes] =
+          CORE::REBALANCE::RebalanceNodeMaps(nodeGraph, rebalanceParams, nodeWeights, edgeWeights);
+
+      // rebuild the discretization with new maps
+      macro_dis->Redistribute(*rownodes, *colnodes, true, true, true);
+    }
+
+    // make sure that we read the micro discretizations only on the processors on
+    // which elements with the corresponding micro material are evaluated
+
+    std::set<int> my_multimat_IDs;
+
+    // take care also of ghosted elements! -> ElementColMap!
+    for (int i = 0; i < macro_dis->ElementColMap()->NumMyElements(); ++i)
+    {
+      DRT::Element* actele = macro_dis->lColElement(i);
+      Teuchos::RCP<MAT::Material> actmat = actele->Material();
+
+      if (id_elch != -1 and actmat->MaterialType() == INPAR::MAT::m_elchmat)
+      {
+        // extract wrapped material
+        auto elchmat = Teuchos::rcp_dynamic_cast<const MAT::ElchMat>(actmat);
+        auto elchphase = Teuchos::rcp_dynamic_cast<const MAT::ElchPhase>(
+            elchmat->PhaseById(elchmat->PhaseID(0)));
+        actmat = elchphase->MatById(elchphase->MatID(0));
+      }
+
+      if ((actmat->MaterialType() == INPAR::MAT::m_struct_multiscale and
+              macro_dis_name == "structure") or
+          (actmat->MaterialType() == INPAR::MAT::m_scatra_multiscale and
+              macro_dis_name == "scatra") or
+          (actmat->MaterialType() == INPAR::MAT::m_newman_multiscale and
+              macro_dis_name == "scatra"))
+      {
+        MAT::PAR::Parameter* actparams = actmat->Parameter();
+        my_multimat_IDs.insert(actparams->Id());
+      }
+    }
+
+    // check which macro procs have an element with micro material
+    int foundmicromat = 0;
+    int foundmicromatmyrank = -1;
+    if (my_multimat_IDs.size() != 0)
+    {
+      foundmicromat = 1;
+      foundmicromatmyrank = lcomm->MyPID();
+    }
+
+    // find out how many procs have micro material
+    int nummicromat = 0;
+    lcomm->SumAll(&foundmicromat, &nummicromat, 1);
+    // broadcast number of procs that have micro material
+    gcomm->Broadcast(&nummicromat, 1, 0);
+
+    // every proc needs to know which procs have micro material in order to distribute colors
+    // array is filled with either its local proc id or -1 when no micro mat was found
+    std::vector<int> foundmyranks;
+    foundmyranks.resize(lcomm->NumProc(), -1);
+    lcomm->GatherAll(&foundmicromatmyrank, foundmyranks.data(), 1);
+
+    // determine color of macro procs with any contribution to micro material, only important for
+    // procs with micro material color starts with 0 and is incremented for each group
+    int color = -1;
+    if (foundmicromat == 1)
+    {
+      for (int foundmyrank : foundmyranks)
+      {
+        if (foundmyrank != -1) ++color;
+        if (foundmyrank == foundmicromatmyrank) break;
+      }
+    }
+    else
+    {
+      color = MPI_UNDEFINED;
+    }
+
+    // do the splitting of the communicator (macro proc must always be proc in subcomm with lowest
+    // key
+    // --> 0 is inserted here)
+    MPI_Comm mpi_local_comm;
+    MPI_Comm_split((Teuchos::rcp_dynamic_cast<Epetra_MpiComm>(gcomm, true)->GetMpiComm()), color,
+        0 /*important here*/, &mpi_local_comm);
+
+    // sort out macro procs that do not have micro material
+    if (foundmicromat == 1)
+    {
+      // create the sub communicator that includes one macro proc and some supporting procs
+      Teuchos::RCP<Epetra_Comm> subgroupcomm = Teuchos::rcp(new Epetra_MpiComm(mpi_local_comm));
+      communicators_->SetSubComm(subgroupcomm);
+
+      // find out how many micro problems have to be solved on this macro proc
+      int microcount = 0;
+      for (const auto& material_map : *materials_->Map())
+      {
+        int matid = material_map.first;
+        if (my_multimat_IDs.find(matid) != my_multimat_IDs.end()) microcount++;
+      }
+      // and broadcast it to the corresponding group of procs
+      subgroupcomm->Broadcast(&microcount, 1, 0);
+
+      for (const auto& material_map : *materials_->Map())
+      {
+        int matid = material_map.first;
+
+        if (my_multimat_IDs.find(matid) != my_multimat_IDs.end())
+        {
+          Teuchos::RCP<MAT::Material> mat = MAT::Material::Factory(matid);
+
+          // initialize variables storing micro-scale information
+          int microdisnum(-1);
+          std::string micro_dis_name = "";
+          std::string micro_inputfile_name("");
+          DRT::Problem* micro_problem(nullptr);
+
+          // structure case
+          if (macro_dis_name == "structure")
+          {
+            // access multi-scale structure material
+            auto* micromat = static_cast<MAT::MicroMaterial*>(mat.get());
+
+            // extract and broadcast number of micro-scale discretization
+            microdisnum = micromat->MicroDisNum();
+            subgroupcomm->Broadcast(&microdisnum, 1, 0);
+
+            // set name of micro-scale discretization
+            micro_dis_name = "structure";
+
+            // extract name of micro-scale input file
+            micro_inputfile_name = micromat->MicroInputFileName();
+
+            // instantiate micro-scale problem
+            micro_problem = DRT::Problem::Instance(microdisnum);
+          }
+
+          // scalar transport case
+          else
+          {
+            // access multi-scale scalar transport material
+            MAT::ScatraMultiScale* micromat = nullptr;
+            if (id_scatra != -1)
+              micromat = dynamic_cast<MAT::ScatraMatMultiScale*>(mat.get());
+            else if (id_elch != -1)
+              micromat = dynamic_cast<MAT::NewmanMultiScale*>(mat.get());
+            else
+              dserror("How the heck did you get here?!");
+
+            // extract and broadcast number of micro-scale discretization
+            microdisnum = micromat->MicroDisNum();
+            subgroupcomm->Broadcast(&microdisnum, 1, 0);
+>>>>>>> f693564e05... Add New Problem type:src/lib/baci_lib_globalproblem.cpp
 
   reader.ReadSection("--STRUCT NOX", *list);
   reader.ReadSection("--STRUCT NOX/Direction", *list);
