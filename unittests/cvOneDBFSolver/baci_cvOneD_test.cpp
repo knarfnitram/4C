@@ -138,13 +138,13 @@ namespace
 
   TEST_F(OneDSolverTest, partitioned)
   {
-    double q_1d = 0;
+    /*double q_1d = 0;
     double q_3d = 0;
     double p_3d = 0;
     double p_1d = 0;
     double t = 0;
     double t_end = 1;
-    double tol = 0.03;
+    double tol = 0.03;*/
 
     // Initialize the OneDSolver
     // create model manager
