@@ -10,10 +10,15 @@
 #include "baci_artery_cvOneDBF_Partitioned.hpp"
 
 #include "baci_adapter_fld_base_algorithm.H"
+#include "baci_artery_cvOneDBF_utils.h"
 #include "baci_fluid_implicit_integration.H"
 #include "baci_fluid_utils.H"
 #include "baci_lib_discret.H"
 #include "baci_lib_globalproblem.H"
+
+#include <NOX_Epetra_Interface_Required.H>
+#include <OneDSolverInterface.h>
+
 
 BACI_NAMESPACE_OPEN
 
@@ -21,12 +26,16 @@ namespace ARTCV
 {
 
 
-  PartitionAlg::PartitionAlg() {}
+  PartitionAlg::PartitionAlg()
+      : AlgorithmBase(DRT::Problem::Instance()->GetDis("fluid")->Comm(),
+            DRT::Problem::Instance()->FSIDynamicParams()),
+        comm_(DRT::Problem::Instance()->GetDis("fluid")->Comm())
+  {
+  }
 
   void PartitionAlg::Initialize_Fluid(void)
   {
-    // access to some parameter lists
-    // const Teuchos::ParameterList& probtype = DRT::Problem::Instance()->ProblemTypeParams();
+    // set up parameter list for the fluid
     const Teuchos::ParameterList& fdyn = DRT::Problem::Instance()->FluidDynamicParams();
 
     // create instance of fluid basis algorithm
@@ -37,7 +46,28 @@ namespace ARTCV
     if (DRT::Problem::Instance()->Restart()) dserror("Currently we do not have a propper restart.");
   }
 
-  void PartitionAlg::Initialize_Artery() {}
+  void PartitionAlg::Initialize_Artery()
+  {
+    UTILS::executeSerial(comm_,
+        [&]()
+        {
+          // Your arbitrary code to be executed on the first MPI processor (rank 0)
+          std::cout << "Executing code on rank 0." << std::endl;
+          // Place your code here
+
+          // create model manager
+          myOneDSolver_ = Teuchos::rcp(new OneDSolverInterface());
+
+          // Create Solver Options of cvOneD
+          opts_ = Teuchos::rcp(new cvOneDOptions());
+
+          // Read Model From File
+          myOneDSolver_->readModel("inputFile", opts_.get());
+
+          // perform model check
+          opts_->check();
+        });
+  }
 
   void PartitionAlg::Print_Logo()
   {
@@ -91,6 +121,15 @@ namespace ARTCV
     for (const auto& [key, value] : meanPressure)
       std::cout << '[' << key << "] = " << value << "; ";
     std::cout << '\n';
+  }
+
+  void PartitionAlg::Initialize_Coupling() {}
+
+  void PartitionAlg::ReadRestart(int step) { dserror("Restart needs to be implemented!."); }
+
+  bool PartitionAlg::computeF(const Epetra_Vector& x, Epetra_Vector& F, const FillType fillFlag)
+  {
+    return false;
   }
 
 
