@@ -21,6 +21,7 @@ void artery_cvOneDBF_drt()
 
   partition_solver.Initialize_Fluid();
   partition_solver.Initialize_Artery();
+  partition_solver.Initialize_Coupling();
 
 
 

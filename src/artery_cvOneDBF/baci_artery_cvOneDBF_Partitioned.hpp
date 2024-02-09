@@ -7,50 +7,84 @@
 
 */
 /*----------------------------------------------------------------------*/
+#include "baci_adapter_algorithmbase.H"
+
+#include <NOX.H>
+#include <NOX_Epetra_Interface_Required.H>
 #include <Teuchos_RCPDecl.hpp>
 
-#ifndef BACI_PARTITIONALG_H
-#define BACI_PARTITIONALG_H
+#ifndef BACI_ARTERY_CVONEDBF_PARTITIONED_HPP
+#define BACI_ARTERY_CVONEDBF_PARTITIONED_HPP
 
-namespace BACI
+class Epetra_Vector;
+class FillType;
+class OneDSolverInterface;
+class cvOneDOptions;
+
+BACI_NAMESPACE_OPEN
+
+namespace ADAPTER
+{
+  class FluidBaseAlgorithm;
+}
+
+namespace ARTCV
 {
 
-  namespace ADAPTER
+  class PartitionAlg : public ADAPTER::AlgorithmBase, public ::NOX::Epetra::Interface::Required
   {
-    class FluidBaseAlgorithm;
-  }
+   public:
+    //! standard Constructor();
+    PartitionAlg();
 
-  namespace ARTCV
-  {
+    //! Restart
+    void ReadRestart(int step) override;
 
-    class PartitionAlg
-    {
-     public:
-      //! Constructor();
-      PartitionAlg();
+    //! Initialize the fluid field
+    void Initialize_Fluid(void);
 
-      //! Initialize the fluid field
-      void Initialize_Fluid(void);
+    //! Initialize the artery field
+    void Initialize_Artery(void);
 
-      //! Initialize the artery field
-      void Initialize_Artery(void);
+    //! Initialize the artery field
+    void Initialize_Coupling(void);
 
-      //! Output the Logo of the problem
-      void Print_Logo(void);
+    //! Output the Logo of the problem
+    void Print_Logo(void);
 
-      void Check_Input(void);
+    //! Perform checks to ensure that the problems are set up correctly
+    void Check_Input(void);
 
-      //! evaluate all quantities needed form 3D fluid
-      void Post_Process_Fluid(void);
+    //! evaluate all quantities needed form 3D fluid after Newton
+    void Post_Process_Fluid(void);
 
-      //! evaluate all quantities needed from 1D artery
-      void Post_Process_Artery(void);
+    //! evaluate all quantities needed from 1D artery after Newton
+    void Post_Process_Artery(void);
 
-     private:
-      Teuchos::RCP<ADAPTER::FluidBaseAlgorithm> fluidalgo_;
-    };
+    void Check_Convergence(void);
 
-  }  // namespace ARTCV
+    void Timeloop(const Teuchos::RCP<NOX::Epetra::Interface::Required>& interface);
 
-#endif  // BACI_PARTITION_H
-}
+    /// compute FSI interface residual S^{-1}(F(d)) - d
+    bool computeF(const Epetra_Vector& x, Epetra_Vector& F, const FillType fillFlag) override;
+
+
+   private:
+    //! 3D fluid solver
+    Teuchos::RCP<ADAPTER::FluidBaseAlgorithm> fluidalgo_;
+
+    //! 1D artery solver
+    Teuchos::RCP<OneDSolverInterface> myOneDSolver_;
+
+    //! Options of the 1D artery solver
+    Teuchos::RCP<cvOneDOptions> opts_;
+
+    // communicator
+    const Epetra_Comm& comm_;
+  };
+
+}  // namespace ARTCV
+
+BACI_NAMESPACE_CLOSE
+
+#endif
