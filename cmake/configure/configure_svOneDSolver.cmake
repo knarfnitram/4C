@@ -13,13 +13,17 @@
 #    )
 #endif()
 #add_subdirectory("/home/a11bmafr/software/SimVascular/install/")
-add_library(onedsolver UNKNOWN IMPORTED)
+add_library(svOneDSolver UNKNOWN IMPORTED)
+
+# Set the path to your library and include directories
+set(OneDSolver_INCLUDE_DIR "/home/a11bmafr/software/SimVascular/install/include/onedsolver")
+set(OneDSolver_LIBRARY
+    "/home/a11bmafr/software/SimVascular/install/usr/local/lib/libOneDSolver_core.a"
+    )
 set_target_properties(
-  onedsolver
-  PROPERTIES IMPORTED_LOCATION
-             "/home/a11bmafr/software/SimVascular/install/usr/local/lib/libOneDSolver_core.a"
-             INTERFACE_INCLUDE_DIRECTORIES
-             "/home/a11bmafr/software/SimVascular/install/include/onedsolver"
+  svOneDSolver
+  PROPERTIES IMPORTED_LOCATION "${OneDSolver_LIBRARY}"
+             INTERFACE_INCLUDE_DIRECTORIES "${OneDSolver_INCLUDE_DIR}"
   )
 
 #if(NOT TARGET OneDSolver_lib)
@@ -34,9 +38,10 @@ set_target_properties(
 #find_package(Qhull REQUIRED)
 #baci_add_dependency(baci_all_enabled_external_dependencies OneDSolver_lib)
 
-message(STATUS "onedsolver include directory: ${ONEDSOLVER_INCLUDE_DIR}")
-message(STATUS "onedsolver library directory: ${ONEDSOLVER_LIBRARY}")
-#if(ONEDSOLVER_FOUND)
-#    message(STATUS "onedsolver found")
-#endif()
-baci_add_dependency(baci_all_enabled_external_dependencies onedsolver)
+message(STATUS "onedsolver include directory: ${OneDSolver_INCLUDE_DIR}")
+message(STATUS "onedsolver library directory: ${OneDSolver_LIBRARY}")
+if(svOneDSolver)
+  message(STATUS "onedsolver found")
+endif()
+target_link_libraries(baci_all_enabled_external_dependencies INTERFACE svOneDSolver)
+#baci_add_dependency(baci_all_enabled_external_dependencies onedsolver)
