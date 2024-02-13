@@ -7,7 +7,7 @@
 
 */
 /*----------------------------------------------------------------------*/
-#include "baci_config.H"
+#include "baci_config.hpp"
 
 #include <Epetra_Comm.h>
 
