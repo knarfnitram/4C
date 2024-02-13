@@ -18,6 +18,8 @@
 
 #include "baci_fluid_implicit_integration.hpp"
 
+#include <OneDSolverInterface.h>
+
 BACI_NAMESPACE_OPEN
 
 namespace ADAPTER
@@ -168,7 +170,10 @@ namespace FLD
     /// flag for potential 3D Reduced_D coupling
     bool strong_redD_3d_coupling_;
 
+    Teuchos::RCP<OneDSolverInterface> my;
+
    private:
+    // std::OneDSolverInterface *OneDSolver;
   };  // class TimIntRedModels
 
 }  // namespace FLD
