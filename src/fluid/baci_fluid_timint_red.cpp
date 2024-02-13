@@ -20,6 +20,8 @@
 #include "baci_lib_locsys.hpp"
 #include "baci_linalg_utils_sparse_algebra_assemble.hpp"
 
+#include <OneDSolverInterface.h>
+
 BACI_NAMESPACE_OPEN
 
 
@@ -49,6 +51,7 @@ FLD::TimIntRedModels::TimIntRedModels(const Teuchos::RCP<DRT::Discretization>& a
  *----------------------------------------------------------------------*/
 void FLD::TimIntRedModels::Init()
 {
+  my = Teuchos::rcp(new OneDSolverInterface());
   // Vectors associated to boundary conditions
   // -----------------------------------------
 

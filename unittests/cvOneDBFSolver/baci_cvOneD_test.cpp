@@ -1,7 +1,7 @@
 /*----------------------------------------------------------------------*/
 /*! \file
 
-\brief Unit tests to integrate cvOneDBFSolver to baci
+\brief Unit tests for integration of cvOneDBFSolver with baci
 
 \level 1
 */
@@ -9,13 +9,11 @@
 
 #include <gtest/gtest.h>
 
-#include "baci_discretization_geometry_element_volume.H"
+#include "baci_so3_hex8.H"
 
 #include <cvOneDSynchronizer.h>
 #include <OneDSolverInterface.h>
-#include <string.h>
 
-#include <fstream>
 #include <iostream>
 
 namespace
@@ -32,7 +30,7 @@ namespace
     static constexpr double TOL = 1.0e-4;
 
     //! read input file
-    // TODO fix file path
+    // TODO fix absolute file path
     string inputFile =
         "/home/a11bmafr/software/baci/baci/unittests/cvOneDBFSolver/cv_velocity_Coupling.in";
   };
@@ -66,11 +64,6 @@ namespace
   {
     // This is a small integration test to check if the velocity is right set and evaluated in the
     // one d artery library
-
-    // read input file
-    // TODO fix file path
-    // string
-    // inputFile="/home/a11bmafr/software/baci/baci/unittests/cvOneDBFSolver/cv_velocity_Coupling.in";
 
     // create model manager
     OneDSolverInterface myOneDSolver = OneDSolverInterface();
