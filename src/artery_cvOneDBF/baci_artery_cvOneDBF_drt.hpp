@@ -8,10 +8,10 @@
 */
 /*----------------------------------------------------------------------*/
 
-#ifndef BACI_ARTERY_CVONEDBF_DRT_H
-#define BACI_ARTERY_CVONEDBF_DRT_H
+#ifndef BACI_ARTERY_CVONEDBF_DRT_HPP
+#define BACI_ARTERY_CVONEDBF_DRT_HPP
 
-#include "baci_config.H"
+#include "baci_config.hpp"
 
 
 BACI_NAMESPACE_OPEN

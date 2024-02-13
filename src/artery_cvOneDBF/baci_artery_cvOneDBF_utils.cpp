@@ -8,7 +8,9 @@
 */
 /*----------------------------------------------------------------------*/
 
-#include "baci_artery_cvOneDBF_utils.h"
+#include "baci_config.hpp"
+
+#include "baci_artery_cvOneDBF_utils.hpp"
 
 #include <Epetra_Comm.h>
 
