@@ -7,18 +7,21 @@
 
 */
 /*----------------------------------------------------------------------*/
+#include "baci_config.hpp"
+
 #include "baci_artery_cvOneDBF_Partitioned.hpp"
 
-#include "baci_adapter_fld_base_algorithm.H"
-#include "baci_artery_cvOneDBF_utils.h"
-#include "baci_fluid_implicit_integration.H"
-#include "baci_fluid_utils.H"
-#include "baci_lib_discret.H"
-#include "baci_lib_globalproblem.H"
+#include "baci_adapter_fld_base_algorithm.hpp"
+#include "baci_artery_cvOneDBF_utils.hpp"
+#include "baci_fluid_implicit_integration.hpp"
+#include "baci_fluid_utils.hpp"
+#include "baci_global_data.hpp"
+#include "baci_lib_discret.hpp"
 
 #include <NOX_Epetra_Interface_Required.H>
 #include <OneDSolverInterface.h>
 
+#define SV
 
 BACI_NAMESPACE_OPEN
 
@@ -27,23 +30,24 @@ namespace ARTCV
 
 
   PartitionAlg::PartitionAlg()
-      : AlgorithmBase(DRT::Problem::Instance()->GetDis("fluid")->Comm(),
-            DRT::Problem::Instance()->FSIDynamicParams()),
-        comm_(DRT::Problem::Instance()->GetDis("fluid")->Comm())
+      : AlgorithmBase(GLOBAL::Problem::Instance()->GetDis("fluid")->Comm(),
+            GLOBAL::Problem::Instance()->FSIDynamicParams()),
+        comm_(GLOBAL::Problem::Instance()->GetDis("fluid")->Comm())
   {
   }
 
   void PartitionAlg::Initialize_Fluid(void)
   {
     // set up parameter list for the fluid
-    const Teuchos::ParameterList& fdyn = DRT::Problem::Instance()->FluidDynamicParams();
+    const Teuchos::ParameterList& fdyn = GLOBAL::Problem::Instance()->FluidDynamicParams();
 
     // create instance of fluid basis algorithm
     Teuchos::RCP<ADAPTER::FluidBaseAlgorithm> fluidalgo_ =
         Teuchos::rcp(new ADAPTER::FluidBaseAlgorithm(fdyn, fdyn, "fluid", false));
 
     // read the restart information, set vectors and variables
-    if (DRT::Problem::Instance()->Restart()) dserror("Currently we do not have a propper restart.");
+    if (GLOBAL::Problem::Instance()->Restart())
+      dserror("Currently we do not have a propper restart.");
   }
 
   void PartitionAlg::Initialize_Artery()
@@ -72,14 +76,14 @@ namespace ARTCV
   void PartitionAlg::Print_Logo()
   {
     const std::string fluid_disname = "fluid";
-    const Epetra_Comm& comm = DRT::Problem::Instance()->GetDis(fluid_disname)->Comm();
+    const Epetra_Comm& comm = GLOBAL::Problem::Instance()->GetDis(fluid_disname)->Comm();
     if (comm.MyPID() == 0)
     {
       std::cout
           << "---------------------------------------------------------------------------------"
           << std::endl;
       std::cout
-          << "-------------------- Welcome to the Partioned artery coupling -------------------"
+          << "-------------------- Welcome to the Partioned Artery coupling -------------------"
           << std::endl;
       std::cout
           << "---------------------------------------------------------------------------------"

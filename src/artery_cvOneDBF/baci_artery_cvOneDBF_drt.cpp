@@ -8,10 +8,12 @@
 */
 /*----------------------------------------------------------------------*/
 
-#include "baci_artery_cvOneDBF_drt.h"
+#include "baci_config.hpp"
+
+#include "baci_artery_cvOneDBF_drt.hpp"
 
 #include "baci_artery_cvOneDBF_Partitioned.hpp"
-#include "baci_lib_globalproblem.H"
+#include "baci_global_data.hpp"
 
 BACI_NAMESPACE_OPEN
 

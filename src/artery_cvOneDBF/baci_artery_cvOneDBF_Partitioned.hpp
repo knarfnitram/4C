@@ -7,7 +7,9 @@
 
 */
 /*----------------------------------------------------------------------*/
-#include "baci_adapter_algorithmbase.H"
+#include "baci_config.hpp"
+
+#include "baci_adapter_algorithmbase.hpp"
 
 #include <NOX.H>
 #include <NOX_Epetra_Interface_Required.H>
