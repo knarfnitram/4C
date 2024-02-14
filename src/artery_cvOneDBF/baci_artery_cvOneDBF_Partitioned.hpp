@@ -21,6 +21,7 @@
 class Epetra_Vector;
 class FillType;
 class OneDSolverInterface;
+class cvOneDSynchronizer;
 class cvOneDOptions;
 
 BACI_NAMESPACE_OPEN
@@ -57,6 +58,9 @@ namespace ARTCV
     //! Perform checks to ensure that the problems are set up correctly
     void Check_Input(void);
 
+    //! Solve artery problem;
+    void Artery_Solve(void);
+
     //! evaluate all quantities needed form 3D fluid after Newton
     void Post_Process_Fluid(void);
 
@@ -77,6 +81,9 @@ namespace ARTCV
 
     //! 1D artery solver
     Teuchos::RCP<OneDSolverInterface> myOneDSolver_;
+
+    //! 1D artery
+    Teuchos::RCP<cvOneDSynchronizer> cvOneDSynchronizer_;
 
     //! Options of the 1D artery solver
     Teuchos::RCP<cvOneDOptions> opts_;

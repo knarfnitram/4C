@@ -18,10 +18,12 @@
 #include "baci_global_data.hpp"
 #include "baci_lib_discret.hpp"
 
+// Trilinos
 #include <NOX_Epetra_Interface_Required.H>
-#include <OneDSolverInterface.h>
 
-#define SV
+//
+#include <cvOneDSynchronizer.h>
+#include <OneDSolverInterface.h>
 
 BACI_NAMESPACE_OPEN
 
@@ -52,13 +54,11 @@ namespace ARTCV
 
   void PartitionAlg::Initialize_Artery()
   {
+    string inputfile =
+        "/home/a11bmafr/software/baci/baci/unittests/cvOneDBFSolver/cv_velocity_Coupling.in";
     UTILS::executeSerial(comm_,
         [&]()
         {
-          // Your arbitrary code to be executed on the first MPI processor (rank 0)
-          std::cout << "Executing code on rank 0." << std::endl;
-          // Place your code here
-
           // create model manager
           myOneDSolver_ = Teuchos::rcp(new OneDSolverInterface());
 
@@ -66,77 +66,95 @@ namespace ARTCV
           opts_ = Teuchos::rcp(new cvOneDOptions());
 
           // Read Model From File
-          myOneDSolver_->readModel("inputFile", opts_.get());
+          myOneDSolver_->readModel(inputfile, opts_.get());
 
           // perform model check
           opts_->check();
+
+
+          cvOneDSynchronizer_ = Teuchos::rcp(new cvOneDSynchronizer());
+
+          myOneDSolver_->setupModeluntilNewton(opts_.get(), cvOneDSynchronizer_.get());
+
+          myOneDSolver_->UpdateTimeStep();
         });
   }
-
-  void PartitionAlg::Print_Logo()
+  void PartitionAlg::Artery_Solve()
   {
-    const std::string fluid_disname = "fluid";
-    const Epetra_Comm& comm = GLOBAL::Problem::Instance()->GetDis(fluid_disname)->Comm();
-    if (comm.MyPID() == 0)
+    int iter = 0;
+    while (true)
     {
-      std::cout
-          << "---------------------------------------------------------------------------------"
-          << std::endl;
-      std::cout
-          << "-------------------- Welcome to the Partioned Artery coupling -------------------"
-          << std::endl;
-      std::cout
-          << "---------------------------------------------------------------------------------"
-          << std::endl;
+      // Newton-Raphson Iterations...
+      if (not myOneDSolver_->Do_Newton_Step(&iter))
+      {
+        break;
+      }
     }
-  }
 
-  void PartitionAlg::Post_Process_Fluid()
-  {
-    std::vector<DRT::Condition*> flowratecond;
-    std::string condstring;
-
-    condstring = "SurfFlowRate";
-    auto discret_fluid = fluidalgo_->FluidField()->Discretization();
-    discret_fluid->GetCondition("SurfFlowRate", flowratecond);
-
-    const Teuchos::RCP<const Epetra_Vector> velnp = fluidalgo_->FluidField()->Velnp();
-    if (not velnp.is_valid_ptr())
+    void PartitionAlg::Print_Logo()
     {
-      dserror("velnp of your fluid problem is not initialized.");
+      const std::string fluid_disname = "fluid";
+      const Epetra_Comm& comm = GLOBAL::Problem::Instance()->GetDis(fluid_disname)->Comm();
+      if (comm.MyPID() == 0)
+      {
+        std::cout
+            << "---------------------------------------------------------------------------------"
+            << std::endl;
+        std::cout
+            << "-------------------- Welcome to the Partioned Artery coupling -------------------"
+            << std::endl;
+        std::cout
+            << "---------------------------------------------------------------------------------"
+            << std::endl;
+      }
     }
-    const Teuchos::RCP<Epetra_Vector> test = Teuchos::RCP(new Epetra_Vector(*velnp));
 
-    //  if no flowrate condition is present we do not compute anything
-    if ((int)flowratecond.size() == 0) return;
-    auto physicalType = fluidalgo_->FluidField()->PhysicalType();
+    void PartitionAlg::Post_Process_Fluid()
+    {
+      std::vector<DRT::Condition*> flowratecond;
+      std::string condstring;
 
-    const std::map<int, double> flowrates = FLD::UTILS::ComputeFlowRates(
-        *discret_fluid, test, Teuchos::null, Teuchos::null, condstring, physicalType);
+      condstring = "SurfFlowRate";
+      auto discret_fluid = fluidalgo_->FluidField()->Discretization();
+      discret_fluid->GetCondition("SurfFlowRate", flowratecond);
 
-    const std::map<int, double> meanPressure = FLD::UTILS::ComputeMeanPressure(
-        *discret_fluid, test, condstring, INPAR::FLUID::PhysicalType::incompressible);
+      const Teuchos::RCP<const Epetra_Vector> velnp = fluidalgo_->FluidField()->Velnp();
+      if (not velnp.is_valid_ptr())
+      {
+        dserror("velnp of your fluid problem is not initialized.");
+      }
+      const Teuchos::RCP<Epetra_Vector> test = Teuchos::RCP(new Epetra_Vector(*velnp));
 
-    std::cout << "flowrates";
-    for (const auto& [key, value] : flowrates) std::cout << '[' << key << "] = " << value << "; ";
-    std::cout << '\n';
+      //  if no flowrate condition is present we do not compute anything
+      if ((int)flowratecond.size() == 0) return;
+      auto physicalType = fluidalgo_->FluidField()->PhysicalType();
 
-    std::cout << "meanPressure";
-    for (const auto& [key, value] : meanPressure)
-      std::cout << '[' << key << "] = " << value << "; ";
-    std::cout << '\n';
-  }
+      const std::map<int, double> flowrates = FLD::UTILS::ComputeFlowRates(
+          *discret_fluid, test, Teuchos::null, Teuchos::null, condstring, physicalType);
 
-  void PartitionAlg::Initialize_Coupling() {}
+      const std::map<int, double> meanPressure = FLD::UTILS::ComputeMeanPressure(
+          *discret_fluid, test, condstring, INPAR::FLUID::PhysicalType::incompressible);
 
-  void PartitionAlg::ReadRestart(int step) { dserror("Restart needs to be implemented!."); }
+      std::cout << "flowrates";
+      for (const auto& [key, value] : flowrates) std::cout << '[' << key << "] = " << value << "; ";
+      std::cout << '\n';
 
-  bool PartitionAlg::computeF(const Epetra_Vector& x, Epetra_Vector& F, const FillType fillFlag)
-  {
-    return false;
-  }
+      std::cout << "meanPressure";
+      for (const auto& [key, value] : meanPressure)
+        std::cout << '[' << key << "] = " << value << "; ";
+      std::cout << '\n';
+    }
+
+    void PartitionAlg::Initialize_Coupling() {}
+
+    void PartitionAlg::ReadRestart(int step) { dserror("Restart needs to be implemented!."); }
+
+    bool PartitionAlg::computeF(const Epetra_Vector& x, Epetra_Vector& F, const FillType fillFlag)
+    {
+      return false;
+    }
 
 
-}  // namespace ARTCV
+  }  // namespace ARTCV
 
-BACI_NAMESPACE_CLOSE
+  BACI_NAMESPACE_CLOSE
