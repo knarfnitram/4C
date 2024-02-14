@@ -10,6 +10,7 @@
 
 #include "baci_ale_dyn.hpp"
 #include "baci_art_net_dyn_drt.hpp"
+#include "baci_artery_cvOneDBF_drt.hpp"
 #include "baci_ehl_dyn.hpp"
 #include "baci_elch_dyn.hpp"
 #include "baci_elemag_dyn.hpp"
@@ -191,6 +192,9 @@ void ntacal()
 
     case GLOBAL::ProblemType::elemag:
       electromagnetics_drt();
+      break;
+    case GLOBAL::ProblemType::art_cv:
+      artery_cvOneDBF_drt();
       break;
 
     default:

@@ -351,8 +351,8 @@ void GLOBAL::ReadFields(GLOBAL::Problem& problem, INPUT::DatFileReader& reader, 
       break;
     }
     case GLOBAL::ProblemType::fluid:
-    case GLOBAL::ProblemType::art_cv:
     case GLOBAL::ProblemType::fluid_redmodels:
+    case GLOBAL::ProblemType::art_cv:
     {
       if (distype == CORE::FE::ShapeFunctionType::hdg)
       {
@@ -2164,6 +2164,8 @@ default:
             microdisnum = micromat->MicroDisNum();
             subgroupcomm->Broadcast(&microdisnum, 1, 0);
 >>>>>>> f693564e05... Add New Problem type:src/lib/baci_lib_globalproblem.cpp
+=======
+>>>>>>> 80ba1c83f8... Add new problem again to global problem
 
 >>>>>>> 6c737dcbc7... Add New Problem type
   reader.ReadSection("--STRUCT NOX", *list);
