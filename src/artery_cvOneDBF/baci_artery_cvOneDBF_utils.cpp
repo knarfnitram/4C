@@ -24,6 +24,8 @@ namespace ARTCV::UTILS
     {
       code();
     }
+
+    comm.Barrier();
   }
 }  // namespace ARTCV::UTILS
 
