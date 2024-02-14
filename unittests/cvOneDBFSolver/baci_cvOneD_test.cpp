@@ -9,7 +9,7 @@
 
 #include <gtest/gtest.h>
 
-#include "baci_so3_hex8.H"
+#include "baci_so3_hex8.hpp"
 
 #include <cvOneDSynchronizer.h>
 #include <OneDSolverInterface.h>
