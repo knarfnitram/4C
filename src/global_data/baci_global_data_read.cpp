@@ -1821,6 +1821,7 @@ void GLOBAL::ReadParameter(GLOBAL::Problem& problem, INPUT::DatFileReader& reade
   reader.ReadSection("--IMMERSED METHOD/PARTITIONED SOLVER", *list);
   reader.ReadSection("--FPSI DYNAMIC", *list);
   reader.ReadSection("--ARTERIAL DYNAMIC", *list);
+  reader.ReadSection("--FLUID ARTERY CVONED COUPLING", *list);
   reader.ReadSection("--REDUCED DIMENSIONAL AIRWAYS DYNAMIC", *list);
   reader.ReadSection("--COUPLED REDUCED-D AIRWAYS AND TISSUE DYNAMIC", *list);
   reader.ReadSection("--SEARCH TREE", *list);

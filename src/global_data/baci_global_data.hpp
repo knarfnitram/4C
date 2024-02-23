@@ -387,6 +387,10 @@ namespace GLOBAL
     {
       return parameters_->sublist("ARTERIAL DYNAMIC");
     }
+    const Teuchos::ParameterList& Artery_cvOneDParams() const
+    {
+      return parameters_->sublist("FLUID ARTERY CVONED COUPLING");
+    }
     const Teuchos::ParameterList& ReducedDAirwayDynamicParams() const
     {
       return parameters_->sublist("REDUCED DIMENSIONAL AIRWAYS DYNAMIC");

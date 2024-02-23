@@ -82,6 +82,7 @@ namespace ARTCV
     /// compute FSI interface residual S^{-1}(F(d)) - d
     bool computeF(const Epetra_Vector& x, Epetra_Vector& F, const FillType fillFlag) override;
 
+    void Perform_Baci_tests(void);
 
    private:
     //! 3D fluid solver

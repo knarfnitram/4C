@@ -21,7 +21,7 @@
 // Trilinos
 #include <NOX_Epetra_Interface_Required.H>
 
-//
+// svOneD
 #include <cvOneDSynchronizer.h>
 #include <OneDSolverInterface.h>
 
@@ -133,9 +133,13 @@ namespace ARTCV
   void PartitionAlg::Initialize_Artery()
   {
     new_iter_artery = 0;
+    const Teuchos::ParameterList& art_params = GLOBAL::Problem::Instance()->Artery_cvOneDParams();
 
-    string inputfile =
-        "/home/a11bmafr/software/baci/simulations/artery_elements/coupling_test/3d_1d_sv_file.in";
+
+
+    string inputfile = art_params.get<string>("cvOneD_Inputfile");
+    std::cout << "inputfile:" << inputfile << std::endl;
+
 
     UTILS::executeSerial(comm_,
         [&]()
@@ -294,6 +298,7 @@ namespace ARTCV
         std::cout << "iter: " << iter << " p_1d: " << p_1d << " p_3d " << p_3d << std::endl;
         std::cout << "iter: " << iter << " q_1d: " << q_1d << " q_3d " << q_3d << std::endl;
         std::cout << "p_norm: " << p_norm << " q_norm: " << q_norm << std::endl;
+
         cvOneDSynchronizer_->Print();
 
         if (p_norm < 1e-4 or p_norm / p_1d < 1e-4)
@@ -321,6 +326,13 @@ namespace ARTCV
   bool PartitionAlg::computeF(const Epetra_Vector& x, Epetra_Vector& F, const FillType fillFlag)
   {
     return false;
+  }
+
+  void PartitionAlg::Perform_Baci_tests(void)
+  {
+    GLOBAL::Problem::Instance()->AddFieldTest(fluidalgo_->FluidField()->CreateFieldTest());
+    GLOBAL::Problem::Instance()->TestAll(comm_);
+    return;
   }
 
 
