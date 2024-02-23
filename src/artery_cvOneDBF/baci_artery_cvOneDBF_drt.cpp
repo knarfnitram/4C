@@ -26,35 +26,11 @@ void artery_cvOneDBF_drt()
 
   partition_solver.Check_Input();
 
-  // partition_solver.Initialize_Coupling();
+  // run the fluid simulation
   partition_solver.Start_Solve();
 
-  // currently set up implicitly
-  // TODO: set Pressure over FluidField()
-
-  // run the fluid simulation
-
-
-
-  // fluidalgo->FluidField()->Solve();
-
-  //  fluidalgo->FluidField()->StatisticsAndOutput();
-
-
-
-  // Setup the fluid simulation
-  // Setup the cvOneDBF simulation
-
-  // initialize a Newton Method for partioned coupling
-
-  // fluidalgo->FluidField()->Integrate();
-  //    fluidalgo->FluidField()->TimeLoop();
-
-  // perform result tests if required
-  // DRT::Problem::Instance()->AddFieldTest(fluidalgo->FluidField()->CreateFieldTest());
-  // DRT::Problem::Instance()->TestAll(comm);
-
-  // start the Newton iteration
+  //
+  partition_solver.Perform_Baci_tests();
 }
 
 BACI_NAMESPACE_CLOSE

@@ -13,6 +13,7 @@
 #include "baci_global_data_enums.hpp"
 #include "baci_inpar.hpp"
 #include "baci_inpar_ale.hpp"
+#include "baci_inpar_artery_cvOneD.hpp"
 #include "baci_inpar_beamcontact.hpp"
 #include "baci_inpar_beaminteraction.hpp"
 #include "baci_inpar_beampotential.hpp"
@@ -381,6 +382,7 @@ Teuchos::RCP<const Teuchos::ParameterList> INPUT::ValidParameters()
 
   INPAR::ARTDYN::SetValidParameters(list);
   INPAR::ARTNET::SetValidParameters(list);
+  INPAR::ARTCV::SetValidParameters(list);
   INPAR::BIOFILM::SetValidParameters(list);
   INPAR::REDAIRWAYS::SetValidParameters(list);
   INPAR::CARDIOVASCULAR0D::SetValidParameters(list);

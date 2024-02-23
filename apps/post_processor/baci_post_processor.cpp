@@ -187,7 +187,8 @@ namespace
         }
         break;
       }
-      case GLOBAL::ProblemType::fluid or GLOBAL::ProblemType::art_cv:
+      case GLOBAL::ProblemType::art_cv:
+      case GLOBAL::ProblemType::fluid:
       {
         if (problem.num_discr() == 2)
         {

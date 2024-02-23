@@ -2166,6 +2166,7 @@ baci_test(immersed_oscillating_struct_part_forcecoup_h8 3 "")
 baci_test(immersed_moving_cylinder_part_dispcoup_h8 3 "")
 baci_test(immersed_compressing_struct_part_dispcoup_h8 3 "")
 baci_test(activefiber_square_cell_dashpot_h8 3 "")
+baci_test(artery_cvOneD_fluid_coupling_outflow 1 "")
 baci_test(activefiber_rectangle_cell_dirich_h8 2 "")
 
 # testing the whole framework: from pre_exodus and baci to the post-filter:
