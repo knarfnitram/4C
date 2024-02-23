@@ -3059,6 +3059,7 @@ void FLD::FluidImplicitTimeInt::Evaluate(Teuchos::RCP<const Epetra_Vector> stepi
     neumann_loads_->PutScalar(0.0);
     discret_->SetState("scaaf", scaaf_);
     discret_->EvaluateNeumann(eleparams, *neumann_loads_);
+
     discret_->ClearState();
   }
 

@@ -97,6 +97,11 @@ int DRT::ELEMENTS::StructuralSurface::EvaluateNeumann(Teuchos::ParameterList& pa
     ltype = neum_torque;
     config = config_spatial;
   }
+  else if (*type == "neum_coupling")
+  {
+    ltype = neum_pseudo_orthopressure;
+    config = config_lastconverged;
+  }
   else
   {
     dserror("Unknown type of SurfaceNeumann condition");

@@ -217,7 +217,6 @@ void DRT::Discretization::EvaluateNeumann(Teuchos::ParameterList& params,
               else
                 return 1.0;
             });
-
         value *= functfac;
         const int lid = systemvector.Map().LID(gid);
         if (lid < 0) dserror("Global id %d not on this proc in system vector", gid);
