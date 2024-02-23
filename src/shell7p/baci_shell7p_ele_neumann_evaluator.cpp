@@ -74,6 +74,7 @@ void DRT::ELEMENTS::SHELL::EvaluateNeumann(DRT::Element& ele,
     neum_live_FSI,
     neum_orthopressure,
     neum_pseudo_orthopressure,
+    neum_coupling,
     neum_consthydro_z,
     neum_increhydro_z,
     neum_opres_FSI

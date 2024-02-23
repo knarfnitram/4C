@@ -23,16 +23,20 @@ void artery_cvOneDBF_drt()
 
   partition_solver.Initialize_Fluid();
   partition_solver.Initialize_Artery();
-  partition_solver.Initialize_Coupling();
 
+  partition_solver.Check_Input();
 
+  // partition_solver.Initialize_Coupling();
+  partition_solver.Start_Solve();
+
+  // currently set up implicitly
+  // TODO: set Pressure over FluidField()
 
   // run the fluid simulation
 
 
-  //  fluidalgo->FluidField()->PrepareTimeStep();
 
-  //  fluidalgo->FluidField()->Solve();
+  // fluidalgo->FluidField()->Solve();
 
   //  fluidalgo->FluidField()->StatisticsAndOutput();
 

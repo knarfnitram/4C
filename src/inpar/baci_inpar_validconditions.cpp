@@ -120,10 +120,10 @@ Teuchos::RCP<std::vector<Teuchos::RCP<INPUT::ConditionDefinition>>> INPUT::Valid
   neumanncomponents.emplace_back(Teuchos::rcp(new SelectionComponent("type", "Live",
       Teuchos::tuple<std::string>("Live", "Dead", "PrescribedDomainLoad", "constHydro_z",
           "increaseHydro_z", "pseudo_orthopressure", "orthopressure", "LAS", "PressureGrad",
-          "Torque"),
+          "Torque", "neum_coupling"),
       Teuchos::tuple<std::string>("neum_live", "neum_dead", "pres_domain_load", "neum_consthydro_z",
           "neum_increhydro_z", "neum_pseudo_orthopressure", "neum_orthopressure", "neum_LAS",
-          "neum_pgrad", "neum_torque"),
+          "neum_pgrad", "neum_torque", "neum_coupling"),
       true)));
   neumanncomponents.emplace_back(Teuchos::rcp(
       new SelectionComponent("surface", "Mid", Teuchos::tuple<std::string>("Mid", "Top", "Bot"),

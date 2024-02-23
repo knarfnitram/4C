@@ -52,6 +52,12 @@ namespace ARTCV
     //! Initialize the artery field
     void Initialize_Coupling(void);
 
+    //! Synchronize 1D solver at step
+    void Synch_Step(int step);
+
+    //! Set the Pressure on the 3D Domain
+    void Set_Neumann_Pressure(const double& pressure);
+
     //! Output the Logo of the problem
     void Print_Logo(void);
 
@@ -61,13 +67,15 @@ namespace ARTCV
     //! Solve artery problem;
     void Artery_Solve(void);
 
-    //! evaluate all quantities needed form 3D fluid after Newton
-    void Post_Process_Fluid(void);
+    //! evaluate all quantities needed from 3D fluid after Newton
+    void Post_Process_Fluid(double& flowrate, double& pressure);
 
     //! evaluate all quantities needed from 1D artery after Newton
     void Post_Process_Artery(void);
 
     void Check_Convergence(void);
+
+    void Start_Solve(void);
 
     void Timeloop(const Teuchos::RCP<NOX::Epetra::Interface::Required>& interface);
 
@@ -82,11 +90,19 @@ namespace ARTCV
     //! 1D artery solver
     Teuchos::RCP<OneDSolverInterface> myOneDSolver_;
 
-    //! 1D artery
+    //! 1D artery Synchronizer to exchange Data
     Teuchos::RCP<cvOneDSynchronizer> cvOneDSynchronizer_;
 
     //! Options of the 1D artery solver
     Teuchos::RCP<cvOneDOptions> opts_;
+
+    //! Number of Newton iterations of artery - needed for Postprocessing the Solution
+    int new_iter_artery;
+
+    //! Number of Newton iterations of artery - needed for Postprocessing the Solution
+    int time_step_artery;
+
+    int stepmax_;
 
     // communicator
     const Epetra_Comm& comm_;

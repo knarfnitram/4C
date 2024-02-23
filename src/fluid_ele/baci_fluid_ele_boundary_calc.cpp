@@ -256,6 +256,19 @@ int DRT::ELEMENTS::FluidBoundaryImpl<distype>::EvaluateNeumann(DRT::ELEMENTS::Fl
   const auto* val = condition.Get<std::vector<double>>("val");
   const auto* func = condition.Get<std::vector<int>>("funct");
   const std::string* type = condition.Get<std::string>("type");
+  /*const std::vector<double>* coupling_pressure;
+
+  if(*type == "neum_coupling"){
+      coupling_pressure=condition.Get<std::vector<double>>("coupling_pressure");
+      if(coupling_pressure==NULL){
+          dserror("The coupling pressure is not provided!");
+      }
+      if(coupling_pressure->size()> 1)
+          dserror("The coupling pressure should only contain 1 value.");
+
+      std::cout << "coupling pressure.front() is now " << coupling_pressure->front() << '\n';
+
+  }*/
 
   // get time factor for Neumann term
   const double timefac = fldparatimint_->TimeFacRhs();
@@ -440,6 +453,7 @@ int DRT::ELEMENTS::FluidBoundaryImpl<distype>::EvaluateNeumann(DRT::ELEMENTS::Fl
 
     for (int idim = 0; idim < (nsd_); ++idim)
     {
+      // TODO add here a new evaluation of a bc type, which can synch
       if (*type == "neum_live")
       {
         if ((*onoff)[idim])  // Is this dof activated
@@ -474,7 +488,7 @@ int DRT::ELEMENTS::FluidBoundaryImpl<distype>::EvaluateNeumann(DRT::ELEMENTS::Fl
           }  // end IsNewOSTImplementation
         }    // if (*onoff)
       }
-      else if (*type == "neum_pseudo_orthopressure")
+      else if (*type == "neum_pseudo_orthopressure" or *type == "neum_coupling")
       {
         if (idim != 0 and (*onoff)[idim])
           dserror(
@@ -494,6 +508,9 @@ int DRT::ELEMENTS::FluidBoundaryImpl<distype>::EvaluateNeumann(DRT::ELEMENTS::Fl
               functfacn = GLOBAL::Problem::Instance()
                               ->FunctionById<CORE::UTILS::FunctionOfSpaceTime>(functnum - 1)
                               .Evaluate(coordgpref, time - fldparatimint_->Dt(), idim);
+            /*if (*type == "neum_coupling"){
+                functfacn=coupling_pressure->front();
+            }*/
           }
           else
           {
