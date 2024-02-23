@@ -84,57 +84,58 @@ namespace ARTCV
 
   void PartitionAlg::Check_Input(void)
   {
-    opts_->timeStep;
-    opts_->maxStep;
-
-    const Teuchos::ParameterList& fdyn = GLOBAL::Problem::Instance()->FluidDynamicParams();
-    fdyn.get<int>("NUMSTEP");
-    fdyn.get<double>("TIMESTEP");
-
-    if ((fdyn.get<double>("TIMESTEP") - opts_->timeStep) > std::numeric_limits<double>::epsilon())
-    {
-      dserror("You are using wrong Time step sizes");
-    }
-    if ((fdyn.get<int>("NUMSTEP") - opts_->maxStep) > std::numeric_limits<int>::epsilon())
-    {
-      dserror("maxStep and NUMSTEP must be same in the Inputfiles");
-    }
-
-    if (fluidalgo_.is_null())
-    {
-      dserror("fluid algo is empty");
-    }
-    auto fluid_dis = fluidalgo_->FluidField()->Discretization();
-
-    int number_of_neum_pseudo_orthopressure_conditions = 0;
-
-    for (auto& [name, cond] : fluid_dis->GetAllConditions())
-    {
-      if (name == (std::string) "LineNeumann" || name == (std::string) "SurfaceNeumann" ||
-          name == (std::string) "VolumeNeumann")
-      {
-        if (cond->Get<std::string>("type")->compare("neum_pseudo_orthopressure"))
+    UTILS::executeSerial(comm_,
+        [&]
         {
-          number_of_neum_pseudo_orthopressure_conditions++;
-        }
-      }
-    }
+          const Teuchos::ParameterList& fdyn = GLOBAL::Problem::Instance()->FluidDynamicParams();
+          fdyn.get<int>("NUMSTEP");
+          fdyn.get<double>("TIMESTEP");
 
-    if (number_of_neum_pseudo_orthopressure_conditions > 1)
-    {
-      dserror(
-          "There can only be 1 neum_pseudo_orthopressure."
-          "Sorry for that.");
-    }
+          if ((fdyn.get<double>("TIMESTEP") - opts_->timeStep) >
+              std::numeric_limits<double>::epsilon())
+          {
+            dserror("You are using wrong Time step sizes");
+          }
+          if ((fdyn.get<int>("NUMSTEP") - opts_->maxStep) > std::numeric_limits<int>::epsilon())
+          {
+            dserror("maxStep and NUMSTEP must be same in the Inputfiles");
+          }
 
-    UTILS::executeSerial(comm_, [&]() { std::cout << "Performed all checks" << std::endl; });
+          if (fluidalgo_.is_null())
+          {
+            dserror("fluid algo is empty");
+          }
+          auto fluid_dis = fluidalgo_->FluidField()->Discretization();
+
+          int number_of_neum_pseudo_orthopressure_conditions = 0;
+
+          for (auto& [name, cond] : fluid_dis->GetAllConditions())
+          {
+            if (name == (std::string) "LineNeumann" || name == (std::string) "SurfaceNeumann" ||
+                name == (std::string) "VolumeNeumann")
+            {
+              if (cond->Get<std::string>("type")->compare("neum_pseudo_orthopressure"))
+              {
+                number_of_neum_pseudo_orthopressure_conditions++;
+              }
+            }
+          }
+
+          if (number_of_neum_pseudo_orthopressure_conditions > 1)
+          {
+            dserror(
+                "There can only be 1 neum_pseudo_orthopressure."
+                "Sorry for that.");
+          }
+
+          std::cout << "Performed all checks" << std::endl;
+        });
   }
 
   void PartitionAlg::Initialize_Artery()
   {
     new_iter_artery = 0;
     const Teuchos::ParameterList& art_params = GLOBAL::Problem::Instance()->Artery_cvOneDParams();
-
 
 
     string inputfile = art_params.get<string>("cvOneD_Inputfile");
@@ -155,7 +156,6 @@ namespace ARTCV
 
           // perform model check
           opts_->check();
-
 
           cvOneDSynchronizer_ =
               Teuchos::rcp(new cvOneDSynchronizer(opts_->maxStep + 1, opts_->timeStep));
@@ -179,12 +179,10 @@ namespace ARTCV
             }
           }
         });
-    // TODO: here we must distribute the solution of synchro to all other procs
   }
   void PartitionAlg::Synch_Step(int step)
   {
     UTILS::executeSerial(comm_, [&]() { myOneDSolver_->SynchronizeDataofStep(step); });
-    // TODO: here we must distribute the solution of synchro to all other procs
   }
 
   void PartitionAlg::Print_Logo()
@@ -262,26 +260,32 @@ namespace ARTCV
     {
       int iter = 0;
 
-      double prev_time = fluidalgo_->FluidField()->Time();
-
-      // if i understood it correctly
+      // we take here the next step, because this we do not call initally prep time step.
       double t_next = fluidalgo_->FluidField()->Time() + fluidalgo_->FluidField()->Dt();
-      // double t_next=fluidalgo_->FluidField()->Time();
-
-      // fluidalgo_->FluidField()->PrepareTimeStep();
 
       UTILS::executeSerial(comm_, [&]() { myOneDSolver_->UpdateTimeStep(); });
 
 
-
       while (iter < coupled_iter_max)
       {
-        Artery_Solve();
-        Synch_Step(time_step);
-        myOneDSolver_->SynchronizeDataofStep(time_step);
+        UTILS::executeSerial(comm_,
+            [&]()
+            {
+              Artery_Solve();
+              // Synch_Step(time_step);
+              std::cout << "done solvin" << std::endl;
+              myOneDSolver_->SynchronizeDataofStep(time_step);
 
-        p_1d = cvOneDSynchronizer_->Get_1d_p_at_t(t_next);
-        q_1d = cvOneDSynchronizer_->Get_1d_q_at_t(t_next);
+              p_1d = cvOneDSynchronizer_->Get_1d_p_at_t(t_next);
+              q_1d = cvOneDSynchronizer_->Get_1d_q_at_t(t_next);
+              std::cout << "exit" << std::endl;
+            });
+
+        // comm.Barrier();
+        std::cout << "brodcast" << std::endl;
+        // synch pressure to all procs
+        comm_.Broadcast(&p_1d, 1, 0);
+        comm_.Broadcast(&q_1d, 1, 0);
 
         Set_Neumann_Pressure(p_1d);
         std::cout << "Set neuman pressure to " << p_1d << std::endl;
@@ -289,8 +293,13 @@ namespace ARTCV
         fluidalgo_->FluidField()->Solve();
         Post_Process_Fluid(q_3d, p_3d);
 
-        cvOneDSynchronizer_->Set_3d_q_at_t(t_next, q_3d);
-        cvOneDSynchronizer_->Set_3d_p_at_t(t_next, p_3d);
+
+        UTILS::executeSerial(comm_,
+            [&]()
+            {
+              cvOneDSynchronizer_->Set_3d_q_at_t(t_next, q_3d);
+              cvOneDSynchronizer_->Set_3d_p_at_t(t_next, p_3d);
+            });
         Synch_Step(time_step);
         double p_norm = (p_3d - p_1d) * (p_3d - p_1d);
         double q_norm = (q_3d - q_1d) * (q_3d - q_1d);
@@ -299,7 +308,7 @@ namespace ARTCV
         std::cout << "iter: " << iter << " q_1d: " << q_1d << " q_3d " << q_3d << std::endl;
         std::cout << "p_norm: " << p_norm << " q_norm: " << q_norm << std::endl;
 
-        cvOneDSynchronizer_->Print();
+        UTILS::executeSerial(comm_, [&]() { cvOneDSynchronizer_->Print(); });
 
         if (p_norm < 1e-4 or p_norm / p_1d < 1e-4)
         {
