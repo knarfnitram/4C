@@ -167,17 +167,8 @@ namespace ARTCV
   void PartitionAlg::Artery_Solve()
   {
     UTILS::executeSerial(comm_,
-        [&]()
-        {
-          new_iter_artery = 0;
-          while (true)
-          {
-            // Newton-Raphson Iterations...
-            if (not myOneDSolver_->Do_Newton_Step(&new_iter_artery))
-            {
-              break;
-            }
-          }
+        [&]() {
+
         });
   }
   void PartitionAlg::Synch_Step(int step)
@@ -261,32 +252,47 @@ namespace ARTCV
       int iter = 0;
 
       // we take here the next step, because this we do not call initally prep time step.
-      double t_next = fluidalgo_->FluidField()->Time() + fluidalgo_->FluidField()->Dt();
+      const double t_next = fluidalgo_->FluidField()->Time() + fluidalgo_->FluidField()->Dt();
+      const double t_prev = fluidalgo_->FluidField()->Time();
+
+      std::cout << "TIMES: " << t_next << " " << t_prev << std::endl;
 
       UTILS::executeSerial(comm_, [&]() { myOneDSolver_->UpdateTimeStep(); });
 
       double p_norm_prev = 1e7;
       while (iter < coupled_iter_max)
       {
-        UTILS::executeSerial(comm_,
-            [&]()
+        // UTILS::executeSerial(comm_,
+        //    [&]()
+        //   {
+        if (comm_.MyPID() == 0)
+        {
+          new_iter_artery = 0;
+          while (true)
+          {
+            // Newton-Raphson Iterations...
+            if (not myOneDSolver_->Do_Newton_Step(&new_iter_artery))
             {
-              Artery_Solve();
-              // Synch_Step(time_step);
-              std::cout << "done solvin" << std::endl;
-              myOneDSolver_->SynchronizeDataofStep(time_step);
-
-              p_1d = cvOneDSynchronizer_->Get_1d_p_at_t(t_next);
-              q_1d = cvOneDSynchronizer_->Get_1d_q_at_t(t_next);
-              std::cout << "exit" << std::endl;
-            });
-
+              break;
+            }
+          }
+          // Synch_Step(time_step);
+          std::cout << "done solvin" << std::endl;
+          myOneDSolver_->SynchronizeDataofStep(time_step);
+          std::cout << " Synchron ization completed. get values at t_next:" << t_next << std::endl;
+          p_1d = cvOneDSynchronizer_->Get_1d_p_at_t(t_next);
+          q_1d = cvOneDSynchronizer_->Get_1d_q_at_t(t_next);
+          std::cout << "exit" << std::endl;
+          //});
+        }
         // comm.Barrier();
-        std::cout << "brodcast" << std::endl;
+        std::cout << "broadcast" << std::endl;
         // synch pressure to all procs
         comm_.Broadcast(&p_1d, 1, 0);
         comm_.Broadcast(&q_1d, 1, 0);
 
+
+        fluidalgo_->FluidField()->SetTimeStep(t_prev, time_step);
         Set_Neumann_Pressure(p_1d);
         std::cout << "Set neuman pressure to " << p_1d << std::endl;
         fluidalgo_->FluidField()->PrepareTimeStep();
@@ -331,11 +337,14 @@ namespace ARTCV
 
 
         iter++;
-        fluidalgo_->FluidField()->SetTimeStep(t_next, time_step);
+        // fluidalgo_->FluidField()->ResetStep();
+        // fluidalgo_->FluidField()->ResetTime(t_prev);
       }
 
       fluidalgo_->FluidField()->Update();
+      // fluidalgo_->FluidField()->IncrementTimeAndStep();
       fluidalgo_->FluidField()->StatisticsAndOutput();
+      comm_.Barrier();
       UTILS::executeSerial(
           comm_, [&]() { myOneDSolver_->UpdateSolution(new_iter_artery, time_step_artery); });
     }
