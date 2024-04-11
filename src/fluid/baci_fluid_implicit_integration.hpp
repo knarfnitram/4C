@@ -467,7 +467,12 @@ namespace FLD
     {
       accnp_->Update(1.0, *accn_, 0.0);
       velnp_->Update(1.0, *veln_, 0.0);
-      dispnp_->Update(1.0, *dispn_, 0.0);
+
+      // For Euler Fluid dispnp_ might not be set, here, check b
+      if (not dispnp_.is_null())
+      {
+        dispnp_->Update(1.0, *dispn_, 0.0);
+      }
 
       return;
     }
