@@ -265,7 +265,7 @@ namespace ARTCV
 
       UTILS::executeSerial(comm_, [&]() { myOneDSolver_->UpdateTimeStep(); });
 
-
+      double p_norm_prev = 1e7;
       while (iter < coupled_iter_max)
       {
         UTILS::executeSerial(comm_,
@@ -310,11 +310,25 @@ namespace ARTCV
 
         UTILS::executeSerial(comm_, [&]() { cvOneDSynchronizer_->Print(); });
 
-        if (p_norm < 1e-4 or p_norm / p_1d < 1e-4)
+        if (iter)
         {
-          std::cout << "p_norm converged" << std::endl;
-          break;
+          // double p_rel=p_norm;
+
+          if (p_norm < 1e-4 and q_norm < 1e-4)
+          {
+            std::cout << "p_norm and q_norm converged" << std::endl;
+            break;
+          }
+
+          if (abs(p_norm_prev - p_norm) < 1e-4 and iter > 2 and q_norm < 1e-10)
+          {
+            std::cout << "p_rel_prev stayed same... breaking" << std::endl;
+            break;
+          }
+          p_norm_prev = p_norm;
         }
+
+
 
         iter++;
         fluidalgo_->FluidField()->SetTimeStep(t_next, time_step);
