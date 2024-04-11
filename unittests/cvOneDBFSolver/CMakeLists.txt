@@ -7,4 +7,4 @@ set(SOURCE_LIST
 
 baci_add_google_test_executable(${TESTNAME} SOURCE ${SOURCE_LIST})
 
-baci_target_requires_cyclic_legacy_linking(${TESTNAME})
+#baci_target_requires_cyclic_legacy_linking(${TESTNAME})
