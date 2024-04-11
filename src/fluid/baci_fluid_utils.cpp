@@ -940,7 +940,7 @@ std::map<int, double> FLD::UTILS::ComputeMeanPressure(DRT::Discretization& dis,
        conditer != conds.end(); ++conditer)
   {
     const DRT::Condition* cond = *conditer;
-    const int condID = cond->GetInt("ConditionID");
+    const int condID = *cond->Get<int>("ConditionID");
 
     Teuchos::ParameterList eleparams;
 
@@ -953,7 +953,7 @@ std::map<int, double> FLD::UTILS::ComputeMeanPressure(DRT::Discretization& dis,
     // SetStateTimInt();
     dis.SetState("velaf", velnp);
     // evaluate pressure integral
-    dis.EvaluateCondition(eleparams, condstring, cond->GetInt("ConditionID"));
+    dis.EvaluateCondition(eleparams, condstring, *cond->Get<int>("ConditionID"));
 
     dis.ClearState();
     // sum up local pressure integral on this processor
