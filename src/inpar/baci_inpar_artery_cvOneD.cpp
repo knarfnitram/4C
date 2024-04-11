@@ -5,7 +5,7 @@
 
 \level 3
 */
-
+/*----------------------------------------------------------------------*/
 
 #include "baci_inpar_artery_cvOneD.hpp"
 
@@ -24,12 +24,15 @@ void INPAR::ARTCV::SetValidParameters(Teuchos::RCP<Teuchos::ParameterList> list)
   Teuchos::ParameterList& arteryCV = list->sublist("FLUID ARTERY CVONED COUPLING", false,
       "Parameter list for the FLUID coupled with CVONED ARTERY Problem");
 
-  StringParameter("cvOneD_Inputfile", "", "Absolute Path to cvOneD input file", &arteryCV);
+  BACI::CORE::UTILS::StringParameter(
+      "cvOneD_Inputfile", "", "Absolute Path to cvOneD input file", &arteryCV);
 
-  DoubleParameter("TOL_COUPLE_Q", 1e-4, "Tolerance for convergence check of flow rate", &arteryCV);
-  DoubleParameter("TOL_COUPLE_P", 1e-4, "Tolerance for convergence check of pressure", &arteryCV);
+  BACI::CORE::UTILS::DoubleParameter(
+      "TOL_COUPLE_Q", 1e-4, "Tolerance for convergence check of flow rate", &arteryCV);
+  BACI::CORE::UTILS::DoubleParameter(
+      "TOL_COUPLE_P", 1e-4, "Tolerance for convergence check of pressure", &arteryCV);
 
-  IntParameter("Couple_Iter", 5, "Numer of Partitioned Iterations", &arteryCV);
+  BACI::CORE::UTILS::IntParameter("Couple_Iter", 5, "Numer of Partitioned Iterations", &arteryCV);
 
   // Teuchos::ParameterList &beaminteraction = list->sublist("", false, "");
 }
