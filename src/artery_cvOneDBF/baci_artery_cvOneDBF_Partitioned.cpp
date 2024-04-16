@@ -294,6 +294,7 @@ namespace ARTCV
 
         fluidalgo_->FluidField()->SetTimeStep(t_prev, time_step);
         Set_Neumann_Pressure(p_1d);
+        // cvOneDSynchronizer_->Set_3d_p_at_t(p_1d,t_prev);
         std::cout << "Set neuman pressure to " << p_1d << std::endl;
         fluidalgo_->FluidField()->PrepareTimeStep();
         fluidalgo_->FluidField()->Solve();
@@ -304,6 +305,7 @@ namespace ARTCV
             [&]()
             {
               cvOneDSynchronizer_->Set_3d_q_at_t(t_next, q_3d);
+              // cvOneDSynchronizer_->Set_1D_q_at_t(t_prev, q_3d);
               cvOneDSynchronizer_->Set_3d_p_at_t(t_next, p_3d);
             });
         Synch_Step(time_step);
