@@ -59,7 +59,6 @@ namespace ARTCV
   {
     // Get discretization
     const Teuchos::RCP<DRT::Discretization>& fluid_dis = fluidalgo_->FluidField()->Discretization();
-    bool replace_flag = false;
     for (auto& [name, cond] : fluid_dis->GetAllConditions())
     {
       if (name == (std::string) "LineNeumann" || name == (std::string) "SurfaceNeumann" ||
@@ -70,15 +69,8 @@ namespace ARTCV
         {
           const std::vector<double> val{pressure, 0.0, 0.0};
           cond->Add("val", val);
-          const std::vector<Teuchos::RCP<DRT::Condition>> condsnew = {cond};
-          fluid_dis->ReplaceConditions(name, condsnew);
-          replace_flag = true;
         }
       }
-    }
-    if (replace_flag)
-    {
-      fluid_dis->FillComplete();
     }
   }
 
