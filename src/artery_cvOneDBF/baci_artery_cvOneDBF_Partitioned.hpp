@@ -3,6 +3,7 @@
 
 \brief  Main Algorithm for partitioned coupled 1D artery and 3d fluid simulations
 
+
 \level 3
 
 */
@@ -15,8 +16,8 @@
 #include <NOX_Epetra_Interface_Required.H>
 #include <Teuchos_RCPDecl.hpp>
 
-#ifndef BACI_ARTERY_CVONEDBF_PARTITIONED_HPP
-#define BACI_ARTERY_CVONEDBF_PARTITIONED_HPP
+#ifndef FOUR_C_ARTERY_CVONEDBF_PARTITIONED_HPP
+#define FOUR_C_ARTERY_CVONEDBF_PARTITIONED_HPP
 
 class Epetra_Vector;
 class FillType;
@@ -58,6 +59,10 @@ namespace ARTCV
     //! Set the Pressure on the 3D Domain
     void Set_Neumann_Pressure(const double& pressure);
 
+    //! Set the flowrate on the 3D Domain
+    void Set_Coupling_Flowrate(const double& flowrate);
+
+
     //! Output the Logo of the problem
     void Print_Logo(void);
 
@@ -68,7 +73,7 @@ namespace ARTCV
     void Artery_Solve(void);
 
     //! evaluate all quantities needed from 3D fluid after Newton
-    void Post_Process_Fluid(double& flowrate, double& pressure);
+    void Post_Process_Fluid(double& flowrate, double& pressure, const int cond_id);
 
     //! evaluate all quantities needed from 1D artery after Newton
     void Post_Process_Artery(void);
