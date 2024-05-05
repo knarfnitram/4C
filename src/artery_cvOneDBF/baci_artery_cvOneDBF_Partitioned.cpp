@@ -169,7 +169,7 @@ namespace ARTCV
           // 2=char * coupling_type="3D_1D";
 
           cvOneDSynchronizer_ =
-              Teuchos::rcp(new cvOneDSynchronizer(opts_->maxStep + 1, opts_->timeStep, 1, 2));
+              Teuchos::rcp(new cvOneDSynchronizer(opts_->maxStep + 1, opts_->timeStep, 2, 3));
 
           myOneDSolver_->setupModeluntilNewton(opts_.get(), cvOneDSynchronizer_.get());
         });
@@ -248,10 +248,12 @@ namespace ARTCV
 
   void PartitionAlg::Start_Solve(void)
   {
-    double p_3d = 0.0;
-    double p_1d = 0.0;
-    double q_3d = 0.0;
-    double q_1d = 0.0;
+    const int coupling_id_max = 3;
+    double p_3d[coupling_id_max] = {0.0, 0.0, 0.0};
+    double p_1d[coupling_id_max] = {0.0, 0.0, 0.0};
+    double q_3d[coupling_id_max] = {0.0, 0.0, 0.0};
+    double q_1d[coupling_id_max] = {0.0, 0.0, 0.0};
+
     int coupled_iter_max = 5;
     std::vector<int> partition_iteration_count;
     std::vector<double> vec_q_norm;
@@ -260,8 +262,9 @@ namespace ARTCV
 
     // Assupmtion: condition with 1 equals 1d artery flow into the domain,
     // Conditiond with id 2 equals outflow of domain
-    int id_3d_1d = 1;
-    const int cond_id = 1;
+    int id_3d_1d = 2;
+    int id_1d_3d = 1;
+    // const int cond_id = 2;
 
     // Both time loops start from time_step 1
     for (int time_step = 1; time_step <= stepmax_; time_step++)
@@ -299,49 +302,54 @@ namespace ARTCV
           std::cout << "done solvin" << std::endl;
           myOneDSolver_->SynchronizeDataofStep(time_step);
           std::cout << " Synchronization completed. get values at t_next:" << t_next << std::endl;
-          p_1d = cvOneDSynchronizer_->Get_1d_p_at_t(t_next, id_3d_1d);
-          q_1d = cvOneDSynchronizer_->Get_1d_q_at_t(t_next, id_3d_1d);
-          std::cout << "q_1d:" << q_1d << std::endl;
+          p_1d[id_3d_1d] = cvOneDSynchronizer_->Get_1d_p_at_t(t_next, id_3d_1d);
+          q_1d[id_3d_1d] = cvOneDSynchronizer_->Get_1d_q_at_t(t_next, id_3d_1d);
+          p_1d[id_1d_3d] = cvOneDSynchronizer_->Get_1d_p_at_t(t_next, id_1d_3d);
+          q_1d[id_1d_3d] = cvOneDSynchronizer_->Get_1d_q_at_t(t_next, id_1d_3d);
+          // std::cout << "q_1d:" << q_1d << std::endl;
         }
 
         // synch pressure to all procs
-        comm_.Broadcast(&p_1d, 1, 0);
-        comm_.Broadcast(&q_1d, 1, 0);
+        comm_.Broadcast(p_1d, coupling_id_max, 0);
+        comm_.Broadcast(q_1d, coupling_id_max, 0);
 
         fluidalgo_->FluidField()->SetTimeStep(t_prev, time_step);
 
         // call coupling condition for outflow
-        if (id_3d_1d == 2)
-        {
-          Set_Neumann_Pressure(p_1d);
-        }
+        // if (id_3d_1d == 2)
+        //{
+        if (p_1d[id_3d_1d] > 0) Set_Neumann_Pressure(p_1d[id_3d_1d]);
+        //}
 
 
         // call coupling condition for changing inflow
-        if (id_3d_1d == 1)
-        {
-          Set_Coupling_Flowrate(q_1d);
-        }
+        // if (id_3d_1d == 1)
+        //{
+        Set_Coupling_Flowrate(q_1d[id_1d_3d]);
+        //}
 
         fluidalgo_->FluidField()->PrepareTimeStep();
         fluidalgo_->FluidField()->Solve();
 
-        Post_Process_Fluid(q_3d, p_3d, cond_id);
-
+        Post_Process_Fluid(q_3d[id_3d_1d], p_3d[id_3d_1d], id_3d_1d);
+        Post_Process_Fluid(q_3d[id_1d_3d], p_3d[id_1d_3d], id_1d_3d);
 
         UTILS::executeSerial(comm_,
             [&]()
             {
-              cvOneDSynchronizer_->Set_3d_q_at_t(t_next, q_3d, id_3d_1d);
-              cvOneDSynchronizer_->Set_3d_p_at_t(t_next, p_3d, id_3d_1d);
+              cvOneDSynchronizer_->Set_3d_q_at_t(t_next, q_3d[id_3d_1d], id_3d_1d);
+              cvOneDSynchronizer_->Set_3d_p_at_t(t_next, p_3d[id_3d_1d], id_3d_1d);
+              cvOneDSynchronizer_->Set_3d_q_at_t(t_next, q_3d[id_1d_3d], id_1d_3d);
+              cvOneDSynchronizer_->Set_3d_p_at_t(t_next, p_3d[id_1d_3d], id_1d_3d);
             });
         Synch_Step(time_step);
-        p_norm = (p_3d - p_1d) * (p_3d - p_1d);
-        q_norm = (abs(q_3d) - abs(q_1d)) * (abs(q_3d) - abs(q_1d));
+        p_norm = (p_3d[id_1d_3d] - p_1d[id_1d_3d]) * (p_3d[id_1d_3d] - p_1d[id_1d_3d]);
+        q_norm = (abs(q_3d[id_1d_3d]) - abs(q_1d[id_1d_3d])) *
+                 (abs(q_3d[id_1d_3d]) - abs(q_1d[id_1d_3d]));
 
-        std::cout << "iter: " << iter << " p_1d: " << p_1d << " p_3d " << p_3d << std::endl;
+        /*std::cout << "iter: " << iter << " p_1d: " << p_1d << " p_3d " << p_3d << std::endl;
         std::cout << "iter: " << iter << " q_1d: " << q_1d << " q_3d " << q_3d << std::endl;
-        std::cout << "p_norm: " << p_norm << " q_norm: " << q_norm << std::endl;
+        std::cout << "p_norm: " << p_norm << " q_norm: " << q_norm << std::endl;*/
 
         UTILS::executeSerial(comm_, [&]() { cvOneDSynchronizer_->Print(); });
 
@@ -365,7 +373,7 @@ namespace ARTCV
       partition_iteration_count.push_back(iter);
       vec_q_norm.push_back(q_norm);
       vec_p_norm.push_back(p_norm);
-      vec_p_norm_rel.push_back(p_norm / p_3d);
+      vec_p_norm_rel.push_back(p_norm / p_3d[id_3d_1d]);
 
       fluidalgo_->FluidField()->Update();
       fluidalgo_->FluidField()->StatisticsAndOutput();
