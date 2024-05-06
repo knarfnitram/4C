@@ -82,7 +82,7 @@ namespace ARTCV
     {
       if (name == (std::string) "VolumetricSurfaceFlowCond")
       {
-          // Replace the function value
+        // Replace the function value
         const double val = -1.0 * flowrate;
         cond->Add("Val", val);
       }
@@ -306,7 +306,6 @@ namespace ARTCV
           q_1d[id_3d_1d] = cvOneDSynchronizer_->Get_1d_q_at_t(t_next, id_3d_1d);
           p_1d[id_1d_3d] = cvOneDSynchronizer_->Get_1d_p_at_t(t_next, id_1d_3d);
           q_1d[id_1d_3d] = cvOneDSynchronizer_->Get_1d_q_at_t(t_next, id_1d_3d);
-          // std::cout << "q_1d:" << q_1d << std::endl;
         }
 
         // synch pressure to all procs
@@ -318,9 +317,10 @@ namespace ARTCV
         // call coupling condition for outflow
         // if (id_3d_1d == 2)
         //{
-        if (p_1d[id_3d_1d] > 0) {
-            std::cout<<"Set_Neumann_Pressure"<<std::endl;
-            Set_Neumann_Pressure(p_1d[id_3d_1d]);
+        if (p_1d[id_3d_1d] > 0)
+        {
+          std::cout << "Set_Neumann_Pressure" << std::endl;
+          Set_Neumann_Pressure(p_1d[id_3d_1d]);
         }
         //}
 
@@ -346,40 +346,39 @@ namespace ARTCV
               cvOneDSynchronizer_->Set_3d_p_at_t(t_next, p_3d[id_1d_3d], id_1d_3d);
             });
         Synch_Step(time_step);
-          for (int i = 0; i < coupling_id_max; ++i) {
-              p_norm[i] = (p_3d[i] - p_1d[i]) * (p_3d[i] - p_1d[i]);
-              q_norm[i] = (abs(q_3d[i]) - abs(q_1d[i])) *
-                                 (abs(q_3d[i]) - abs(q_1d[i]));
-          }
+        for (int i = 0; i < coupling_id_max; ++i)
+        {
+          p_norm[i] = (p_3d[i] - p_1d[i]) * (p_3d[i] - p_1d[i]);
+          q_norm[i] = (abs(q_3d[i]) - abs(q_1d[i])) * (abs(q_3d[i]) - abs(q_1d[i]));
+        }
 
-
-        /*std::cout << "iter: " << iter << " p_1d: " << p_1d << " p_3d " << p_3d << std::endl;
-        std::cout << "iter: " << iter << " q_1d: " << q_1d << " q_3d " << q_3d << std::endl;
-        std::cout << "p_norm: " << p_norm << " q_norm: " << q_norm << std::endl;*/
 
         UTILS::executeSerial(comm_, [&]() { cvOneDSynchronizer_->Print(); });
 
         // TODO this needs to be done for every condition
-        if (p_norm[0] < 1e-4 and q_norm[0] < 1e-4 and p_norm[1] < 1e-4 and q_norm[1] < 1e-4 and iter)
+        if (p_norm[0] < 1e-4 and q_norm[0] < 1e-4 and p_norm[1] < 1e-4 and q_norm[1] < 1e-4 and
+            iter)
         {
           std::cout << "p_norm and q_norm converged" << std::endl;
           break;
         }
-
-        if (abs(p_norm_prev[0] - p_norm[0]) < 1e-6 and abs(p_norm_prev[1] - p_norm[1]) < 1e-6 and iter > 0 and q_norm[0] < 1e-10 and q_norm[1] < 1e-10)
+        if (abs(p_norm_prev[0] - p_norm[0]) < 1e-6 and abs(p_norm_prev[1] - p_norm[1]) < 1e-6 and
+            iter > 0 and q_norm[0] < 1e-10 and q_norm[1] < 1e-10)
         {
           std::cout << "p_rel_prev stayed same... breaking" << std::endl;
           break;
         }
-          for (int i = 0; i < coupling_id_max; ++i) {
-              p_norm_prev[i] = p_norm[i];
-          }
+        for (int i = 0; i < coupling_id_max; ++i)
+        {
+          p_norm_prev[i] = p_norm[i];
+        }
 
 
         iter++;
       }
 
       partition_iteration_count.push_back(iter);
+
       vec_q_norm.push_back(q_norm[1]);
       vec_p_norm.push_back(p_norm[1]);
       vec_p_norm_rel.push_back(p_norm[1] / p_3d[1]);
