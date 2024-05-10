@@ -27,10 +27,10 @@ void INPAR::ARTCV::SetValidParameters(Teuchos::RCP<Teuchos::ParameterList> list)
   BACI::CORE::UTILS::StringParameter(
       "cvOneD_Inputfile", "", "Absolute Path to cvOneD input file", &arteryCV);
 
-  BACI::CORE::UTILS::DoubleParameter(
-      "TOL_COUPLE_Q", 1e-4, "Tolerance for convergence check of flow rate condition", &arteryCV);
-  BACI::CORE::UTILS::DoubleParameter(
-      "TOL_COUPLE_P", 1e-4, "Tolerance for convergence check of pressure condition", &arteryCV);
+  BACI::CORE::UTILS::DoubleParameter("TOL_COUPLE_Q", 1e-4,
+      "L2-Norm-Tolerance for convergence check of flow rate condition", &arteryCV);
+  BACI::CORE::UTILS::DoubleParameter("TOL_COUPLE_P", 1e-4,
+      "L2-Norm-Tolerance for convergence check of pressure condition", &arteryCV);
 
   BACI::CORE::UTILS::DoubleParameter("TOL_COUPLE_CHANGE_Q", 1e-8,
       "Stop Tolerance for the flow rate norm of the current iteration compared to the last "

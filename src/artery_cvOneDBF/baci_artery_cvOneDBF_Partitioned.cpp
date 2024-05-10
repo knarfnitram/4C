@@ -151,7 +151,7 @@ namespace ARTCV
       {
         if (name == (std::string) "SurfaceNeumann" and ((cond->GetIf<int>("ID")) != nullptr))
         {
-          if (*(cond->GetIf<int>("ID")) != ID)
+          if (*(cond->Get<int>("ID")) == ID)
           {
             const std::string* type = cond->Get<std::string>("type");
             if (type->compare("neum_pseudo_orthopressure") == 0)
@@ -482,21 +482,23 @@ namespace ARTCV
             converged_condition[i] = true;
           }
 
-          if ((p_norm[i] - p_norm_prev[i]) < tol_p_c and (q_norm[i] - q_norm_prev[i]) < tol_q_c)
+          if ((abs(p_norm[i] - p_norm_prev[i])) < tol_p_c and
+              (abs(q_norm[i] - q_norm_prev[i])) < tol_q_c)
           {
             norms_stayed_same[i] = true;
           }
         }
 
-        if (std::accumulate(converged_condition.begin() + 1, converged_condition.end(), 0) ==
-            converged_condition.size() - 1)
+        if ((long unsigned int)std::accumulate(converged_condition.begin() + 1,
+                converged_condition.end(), 0) == converged_condition.size() - 1)
         {
           std::cout << "p_norm and q_norm converged" << std::endl;
           break;
         }
-        if (std::accumulate(norms_stayed_same.begin() + 1, norms_stayed_same.end(), 0) ==
-                norms_stayed_same.size() - 1 and
-            iter > 1)
+        // TODO this makes no sense, always breaks at iter=5!
+        if (((long unsigned int)std::accumulate(norms_stayed_same.begin() + 1,
+                 norms_stayed_same.end(), 0) == norms_stayed_same.size() - 1) and
+            iter > 4)
         {
           std::cout << "p_rel_prev stayed same... breaking" << std::endl;
           break;
