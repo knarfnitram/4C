@@ -56,11 +56,11 @@ namespace ARTCV
     //! Synchronize 1D solver at step
     void Synch_Step(int step);
 
-    //! Set the Pressure on the 3D Domain
-    void Set_Neumann_Pressure(const double& pressure);
+    //! Update the pseudo Neumann pressure of condition with ID
+    void Set_Neumann_Pressure(const double& pressure, const int ID);
 
-    //! Set the flowrate on the 3D Domain
-    void Set_Coupling_Flowrate(const double& flowrate);
+    //! Update the dirichlet flowrate of condition with ID
+    void Set_Coupling_Flowrate(const double& flowrate, const int ID);
 
 
     //! Output the Logo of the problem
@@ -73,7 +73,7 @@ namespace ARTCV
     void Artery_Solve(void);
 
     //! evaluate all quantities needed from 3D fluid after Newton
-    void Post_Process_Fluid(double& flowrate, double& pressure, const int cond_id);
+    void Post_Process_Fluid();
 
     //! evaluate all quantities needed from 1D artery after Newton
     void Post_Process_Artery(void);
@@ -112,6 +112,31 @@ namespace ARTCV
 
     // communicator
     const Epetra_Comm& comm_;
+
+    // list containing all the coupling ids
+    std::vector<int> id_list;
+
+    // list of the maximum coupling ids
+    int coupling_id_max;
+
+    // maximum coupling iterations for partitioned solve
+    const int coupled_iter_max;
+
+    // different values for pressure
+    std::vector<double> p_3d;
+    std::vector<double> p_1d;
+
+    // different values for flowrate
+    std::vector<double> q_3d;
+    std::vector<double> q_1d;
+
+    // stopping tolerances
+    const double tol_q;
+    const double tol_p;
+
+    // tolerances compared to last iteration
+    const double tol_q_c;
+    const double tol_p_c;
   };
 
 }  // namespace ARTCV

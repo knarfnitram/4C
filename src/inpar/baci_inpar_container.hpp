@@ -73,6 +73,22 @@ namespace INPAR
     InputParameterContainer() = default;
 
     /*!
+     * \brief Copy constructor.
+
+  InputParameterContainer(const InputParameterContainer &other){
+
+      intdata_=other.intdata_;
+      doubledata_=other.doubledata_;
+      booldata_=other.booldata_;
+      vecintdata_=other.vecintdata_;
+      vecdoubledata_=other.vecdoubledata_;
+      mapdata_=other.mapdata_;
+      stringdata_=other.stringdata_;
+      matdata_=other.matdata_;
+      anydata_=other.anydata_;
+  }*/
+
+    /*!
      * \brief Destructor.
      */
     virtual ~InputParameterContainer() = default;

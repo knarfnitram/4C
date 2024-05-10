@@ -1462,6 +1462,100 @@ void INPAR::FLUID::SetValidConditions(
   condlist.push_back(lineflowdeppressure);
   condlist.push_back(surfflowdeppressure);
 
+
+  /*--------------------------------------------------------------------*/
+
+  // Coupling Conditions for external artery elements
+
+  // Dirichlet Inflow Condition
+
+  Teuchos::RCP<ConditionDefinition> surfacecoupling1Darterydirichletflow =
+      Teuchos::rcp(new ConditionDefinition("DESIGN SURF COUPLING 1D ARTERY DIRICHLET FLOW",
+          "SurfaceCoupling1DArteryDirichletFlow", "SurfaceCoupling1DArteryDirichletFlow",
+          DRT::Condition::SurfaceCoupling1DArteryDirichletFlow, true, DRT::Condition::Surface));
+
+  INPUT::AddNamedInt(surfacecoupling1Darterydirichletflow, "ID");
+
+  surfacecoupling1Darterydirichletflow->AddComponent(Teuchos::rcp(new INPUT::SelectionComponent(
+      "ConditionType", "WOMERSLEY", Teuchos::tuple<std::string>("WOMERSLEY", "POLYNOMIAL"),
+      Teuchos::tuple<std::string>("WOMERSLEY", "POLYNOMIAL"), true)));
+
+  surfacecoupling1Darterydirichletflow->AddComponent(
+      Teuchos::rcp(new INPUT::SelectionComponent("prebiased", "NOTPREBIASED",
+          Teuchos::tuple<std::string>("NOTPREBIASED", "PREBIASED", "FORCED"),
+          Teuchos::tuple<std::string>("NOTPREBIASED", "PREBIASED", "FORCED"), true)));
+
+
+  surfacecoupling1Darterydirichletflow->AddComponent(Teuchos::rcp(new INPUT::SelectionComponent(
+      "FlowType", "InFlow", Teuchos::tuple<std::string>("InFlow", "OutFlow"),
+      Teuchos::tuple<std::string>("InFlow", "OutFlow"), true)));
+
+  surfacecoupling1Darterydirichletflow->AddComponent(
+      Teuchos::rcp(new INPUT::SelectionComponent("CorrectionFlag", "WithOutCorrection",
+          Teuchos::tuple<std::string>("WithOutCorrection", "WithCorrection"),
+          Teuchos::tuple<std::string>("WithOutCorrection", "WithCorrection"), true)));
+
+  INPUT::AddNamedReal(surfacecoupling1Darterydirichletflow, "Period");
+  INPUT::AddNamedInt(surfacecoupling1Darterydirichletflow, "Order");
+  INPUT::AddNamedInt(surfacecoupling1Darterydirichletflow, "Harmonics");
+  INPUT::AddNamedReal(surfacecoupling1Darterydirichletflow, "Val");
+  INPUT::AddNamedInt(surfacecoupling1Darterydirichletflow, "Funct");
+
+  surfacecoupling1Darterydirichletflow->AddComponent(
+      Teuchos::rcp(new INPUT::SelectionComponent("NORMAL", "SelfEvaluateNormal",
+          Teuchos::tuple<std::string>("SelfEvaluateNormal", "UsePrescribedNormal"),
+          Teuchos::tuple<std::string>("SelfEvaluateNormal", "UsePrescribedNormal"), true)));
+
+
+  surfacecoupling1Darterydirichletflow->AddComponent(Teuchos::rcp(new INPUT::RealComponent("n1")));
+  surfacecoupling1Darterydirichletflow->AddComponent(Teuchos::rcp(new INPUT::RealComponent("n2")));
+  surfacecoupling1Darterydirichletflow->AddComponent(Teuchos::rcp(new INPUT::RealComponent("n3")));
+
+
+  surfacecoupling1Darterydirichletflow->AddComponent(Teuchos::rcp(new INPUT::SelectionComponent(
+      "CenterOfMass", "SelfEvaluateCenterOfMass",
+      Teuchos::tuple<std::string>("SelfEvaluateCenterOfMass", "UsePrescribedCenterOfMass"),
+      Teuchos::tuple<std::string>("SelfEvaluateCenterOfMass", "UsePrescribedCenterOfMass"), true)));
+
+  surfacecoupling1Darterydirichletflow->AddComponent(Teuchos::rcp(new INPUT::RealComponent("c1")));
+  surfacecoupling1Darterydirichletflow->AddComponent(Teuchos::rcp(new INPUT::RealComponent("c2")));
+  surfacecoupling1Darterydirichletflow->AddComponent(Teuchos::rcp(new INPUT::RealComponent("c3")));
+  condlist.push_back(surfacecoupling1Darterydirichletflow);
+
+  // Pressure Condition
+  std::vector<Teuchos::RCP<LineComponent>> neumann_coupling_pressure;
+
+  // Add global ID for coupling
+  neumann_coupling_pressure.emplace_back(Teuchos::rcp(new SeparatorComponent("ID")));
+  neumann_coupling_pressure.emplace_back(Teuchos::rcp(new IntComponent("ID")));
+
+  neumann_coupling_pressure.emplace_back(Teuchos::rcp(new SeparatorComponent("NUMDOF")));
+  neumann_coupling_pressure.emplace_back(Teuchos::rcp(new IntComponent("numdof")));
+
+  neumann_coupling_pressure.emplace_back(Teuchos::rcp(new SeparatorComponent("ONOFF")));
+  neumann_coupling_pressure.emplace_back(
+      Teuchos::rcp(new IntVectorComponent("onoff", LengthFromInt("numdof"))));
+  neumann_coupling_pressure.emplace_back(Teuchos::rcp(new SeparatorComponent("VAL")));
+  neumann_coupling_pressure.emplace_back(
+      Teuchos::rcp(new RealVectorComponent("val", LengthFromInt("numdof"))));
+  neumann_coupling_pressure.emplace_back(Teuchos::rcp(new SeparatorComponent("FUNCT")));
+  neumann_coupling_pressure.emplace_back(Teuchos::rcp(
+      new IntVectorComponent("funct", LengthFromInt("numdof"), {0, false, true, false})));
+
+  Teuchos::RCP<ConditionDefinition> surfacecoupling1Darteryneumannpressure =
+      Teuchos::rcp(new ConditionDefinition("DESIGN SURF COUPLING 1D ARTERY NEUMANN Pressure",
+          "SurfaceCoupling1DArteryNeumannPressure", "SurfaceCoupling1DArteryNeumannPressure",
+          DRT::Condition::SurfaceCoupling1DArteryNeumannPressure, true, DRT::Condition::Surface));
+
+  for (unsigned i = 0; i < neumann_coupling_pressure.size(); ++i)
+  {
+    surfacecoupling1Darteryneumannpressure->AddComponent(neumann_coupling_pressure[i]);
+  }
+
+  // and append it to the list of all conditions
+  condlist.push_back(surfacecoupling1Darteryneumannpressure);
+
+
   /*--------------------------------------------------------------------*/
   // Slip Supplemental Curved Boundary conditions
 

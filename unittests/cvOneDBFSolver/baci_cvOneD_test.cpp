@@ -106,12 +106,12 @@ namespace
     const double dt = 0.01;
     const int steps = 10;
     // create the Synchronizer for data coupling
-    cvOneDSynchronizer* pSynchronizer = new cvOneDSynchronizer(steps + 1, dt);
+    cvOneDSynchronizer* pSynchronizer = new cvOneDSynchronizer(steps + 1, dt, 1, 1);
 
     // Set the 3d coupling values at the time steps
     for (int i = 1; i < steps; ++i)
     {
-      pSynchronizer->Set_3d_q_at_t(dt * i, 0.002 * i);
+      pSynchronizer->Set_3d_q_at_t(dt * i, 0.002 * i, 1);
     }
 
     // Create Model and Run Simulation
@@ -131,7 +131,7 @@ namespace
     // compare the results
     for (int i = 0; i < steps; ++i)
     {
-      EXPECT_NEAR(solution[i], pSynchronizer->Get_1d_p_at_t(i * dt), OneDSolverTest::TOL);
+      EXPECT_NEAR(solution[i], pSynchronizer->Get_1d_p_at_t(i * dt, 1), OneDSolverTest::TOL);
     }
   }
 
@@ -162,7 +162,7 @@ namespace
     const double dt = 0.01;
     const int steps = 10;
     // create the Synchronizer for data coupling
-    cvOneDSynchronizer* pSynchronizer = new cvOneDSynchronizer(steps + 1, dt);
+    cvOneDSynchronizer* pSynchronizer = new cvOneDSynchronizer(steps + 1, dt, 1, 1);
 
     // Create Model and Run Simulation
     myOneDSolver.setupModeluntilNewton(opts, pSynchronizer);

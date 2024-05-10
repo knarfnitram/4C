@@ -287,7 +287,9 @@ namespace DRT
       ScatraPartitioning,
       SilverMueller,
       ElementTag,
-      NodeTag
+      NodeTag,
+      SurfaceCoupling1DArteryDirichletFlow,
+      SurfaceCoupling1DArteryNeumannPressure
     };
 
     /*!
@@ -338,6 +340,11 @@ namespace DRT
     \brief Copy Constructor
     */
     Condition(const DRT::Condition& old);
+
+    /*!
+    \brief Copy Constructor with additional replacement to custom ConditionType
+    */
+    Condition(const DRT::Condition& old, const ConditionType type);
 
     //@}
 

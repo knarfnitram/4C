@@ -23,7 +23,6 @@ void artery_cvOneDBF_drt()
 
   partition_solver.Initialize_Fluid();
   partition_solver.Initialize_Artery();
-  std::cout << "here we go parallel" << std::endl;
   partition_solver.Check_Input();
 
   // run the fluid simulation

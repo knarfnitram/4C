@@ -34,7 +34,15 @@ namespace ARTCV
   PartitionAlg::PartitionAlg()
       : AlgorithmBase(GLOBAL::Problem::Instance()->GetDis("fluid")->Comm(),
             GLOBAL::Problem::Instance()->FSIDynamicParams()),
-        comm_(GLOBAL::Problem::Instance()->GetDis("fluid")->Comm())
+        comm_(GLOBAL::Problem::Instance()->GetDis("fluid")->Comm()),
+        coupled_iter_max(
+            GLOBAL::Problem::Instance()->Artery_cvOneDParams().get<int>("COUPLE_ITER")),
+        tol_q(GLOBAL::Problem::Instance()->Artery_cvOneDParams().get<double>("TOL_COUPLE_Q")),
+        tol_p(GLOBAL::Problem::Instance()->Artery_cvOneDParams().get<double>("TOL_COUPLE_P")),
+        tol_q_c(
+            GLOBAL::Problem::Instance()->Artery_cvOneDParams().get<double>("TOL_COUPLE_CHANGE_Q")),
+        tol_p_c(
+            GLOBAL::Problem::Instance()->Artery_cvOneDParams().get<double>("TOL_COUPLE_CHANGE_P"))
   {
   }
 
@@ -42,6 +50,57 @@ namespace ARTCV
   {
     // set up parameter list for the fluid
     const Teuchos::ParameterList& fdyn = GLOBAL::Problem::Instance()->FluidDynamicParams();
+
+    // Create Coupling Pressure and Inflow Conditions according
+    Teuchos::RCP<DRT::Discretization> actdis = GLOBAL::Problem::Instance()->GetDis("fluid");
+    std::vector<DRT::Condition*> neumann_coupling_conditions;
+    actdis->GetCondition("SurfaceCoupling1DArteryNeumannPressure", neumann_coupling_conditions);
+
+    // The conditions we create here have an additional parameter called "ID"
+    // with this they can be distinguished from "normal" Neumann or Inflowrate conditions
+    for (DRT::Condition* ncc : neumann_coupling_conditions)
+    {
+      // Add for every neumann pressure artery coupling a new surface condition
+      id_list.push_back(*ncc->Get<int>("ID"));
+      auto new_cond = Teuchos::rcp(new DRT::Condition(*ncc, DRT::Condition::SurfaceNeumann));
+      new_cond->Add("type", string("neum_pseudo_orthopressure"));
+
+      actdis->SetCondition("SurfaceNeumann", new_cond);
+
+      // Add for every neumann pressure the surface for evaluation
+      auto new_flowrate_cond =
+          Teuchos::rcp(new DRT::Condition(*ncc, DRT::Condition::FlowRateThroughSurface_3D));
+      new_flowrate_cond->Add("ConditionID", int(*ncc->Get<int>("ID")));
+      actdis->SetCondition("SurfFlowRate", new_flowrate_cond);
+    }
+
+    std::vector<DRT::Condition*> inflow_coupling_conditions;
+    actdis->GetCondition("SurfaceCoupling1DArteryDirichletFlow", inflow_coupling_conditions);
+    if (inflow_coupling_conditions.empty() and neumann_coupling_conditions.empty())
+    {
+      dserror(
+          "I have not found a SurfaceCoupling1DArteryNeumannPressure or "
+          "SurfaceCoupling1DArteryDirichletFlow Condition. Please provide one of those coupling "
+          "conditions.");
+    }
+
+    // Add for every inflow artery coupling a new surface condition
+    for (DRT::Condition* icc : inflow_coupling_conditions)
+    {
+      id_list.push_back(*icc->Get<int>("ID"));
+      auto new_cond =
+          Teuchos::rcp(new DRT::Condition(*icc, DRT::Condition::VolumetricSurfaceFlowCond));
+
+      // Add Additional ConditionID, which is the same as the normal coupling ID
+      new_cond->Add("ConditionID", *icc->Get<int>("ID"));
+      actdis->SetCondition("VolumetricSurfaceFlowCond", new_cond);
+
+      // Add flowrate and mean pressure conditions for evaluation
+      auto new_flowrate_cond =
+          Teuchos::rcp(new DRT::Condition(*icc, DRT::Condition::FlowRateThroughSurface_3D));
+      new_flowrate_cond->Add("ConditionID", *icc->Get<int>("ID"));
+      actdis->SetCondition("SurfFlowRate", new_flowrate_cond);
+    }
 
     // create instance of fluid basis algorithm
     fluidalgo_ = Teuchos::rcp(new ADAPTER::FluidBaseAlgorithm(fdyn, fdyn, "fluid", false));
@@ -51,40 +110,78 @@ namespace ARTCV
     stepmax_ = fdyn.get<int>("NUMSTEP");
 
     // read the restart information, set vectors and variables
-    if (GLOBAL::Problem::Instance()->Restart())
-      dserror("Currently we do not have a propper restart.");
+    if (GLOBAL::Problem::Instance()->Restart()) dserror("Currently we do not support restart.");
+
+    // check for unique ID by sorting
+    if (!std::is_sorted(id_list.begin(), id_list.end())) std::sort(id_list.begin(), id_list.end());
+
+    auto adjacent_element =
+        std::adjacent_find(id_list.begin(), id_list.end(), std::not_equal_to<int>());
+
+    if (adjacent_element == id_list.end() and id_list.size() > 1)
+    {
+      for (int id : id_list)
+      {
+        std::cout << id << std::endl;
+      }
+      dserror(
+          "It seems that some Coupling IDs have not a unique numbering. Please provide unique IDs "
+          "on Coupling Conditions.");
+    }
+
+    // we allocate the size of the highest id + 1 (place at 1 remains unused)
+    coupling_id_max = id_list.back() + 1;
+
+    // resize the arrays accordingly and intitalize
+
+    p_3d.resize(coupling_id_max, 0.0);
+    p_1d.resize(coupling_id_max, 0.0);
+    q_3d.resize(coupling_id_max, 0.0);
+    q_1d.resize(coupling_id_max, 0.0);
   }
 
-  void PartitionAlg::Set_Neumann_Pressure(const double& pressure)
+  void PartitionAlg::Set_Neumann_Pressure(const double& pressure, const int ID)
   {
-    // Get discretization
-    const Teuchos::RCP<DRT::Discretization>& fluid_dis = fluidalgo_->FluidField()->Discretization();
-    for (auto& [name, cond] : fluid_dis->GetAllConditions())
+    if (pressure > 0)
     {
-      if (name == (std::string) "LineNeumann" || name == (std::string) "SurfaceNeumann" ||
-          name == (std::string) "VolumeNeumann")
+      // Get discretization
+      const Teuchos::RCP<DRT::Discretization>& fluid_dis =
+          fluidalgo_->FluidField()->Discretization();
+      for (auto& [name, cond] : fluid_dis->GetAllConditions())
       {
-        const std::string* type = cond->Get<std::string>("type");
-        if (type->compare("neum_pseudo_orthopressure") == 0)
+        if (name == (std::string) "SurfaceNeumann" and ((cond->GetIf<int>("ID")) != nullptr))
         {
-          const std::vector<double> val{pressure, 0.0, 0.0};
-          cond->Add("val", val);
+          if (*(cond->GetIf<int>("ID")) != ID)
+          {
+            const std::string* type = cond->Get<std::string>("type");
+            if (type->compare("neum_pseudo_orthopressure") == 0)
+            {
+              const std::vector<double> val{pressure, 0.0, 0.0};
+              cond->Add("val", val);
+            }
+          }
         }
       }
     }
   }
 
-  void PartitionAlg::Set_Coupling_Flowrate(const double& flowrate)
+  void PartitionAlg::Set_Coupling_Flowrate(const double& flowrate, const int ID)
   {
     // Get discretization and search for Volumetric Surface Flow conditions
     const Teuchos::RCP<DRT::Discretization>& fluid_dis = fluidalgo_->FluidField()->Discretization();
     for (auto& [name, cond] : fluid_dis->GetAllConditions())
     {
-      if (name == (std::string) "VolumetricSurfaceFlowCond")
+      // check if we have a flow condition which was created due to the coupled problem
+      if (name == (std::string) "VolumetricSurfaceFlowCond" and (cond->GetIf<int>("ID") != nullptr))
       {
-        // Replace the function value
-        const double val = -1.0 * flowrate;
-        cond->Add("Val", val);
+        // we for certainly have found a Condition, which needs to be udpated
+        // check if we have the ID generated by originally Coupling Problem
+        if (*cond->Get<int>("ID") == ID)
+        {
+          // Replace the function value
+          const double val = -1.0 * flowrate;
+          cond->Add("Val", val);
+        }
       }
     }
   }
@@ -118,8 +215,11 @@ namespace ARTCV
 
           int number_of_neum_pseudo_orthopressure_conditions = 0;
 
+          std::vector<int> flowrate_ids;
+
           for (auto& [name, cond] : fluid_dis->GetAllConditions())
           {
+            cond->Print(cout);
             if (name == (std::string) "LineNeumann" || name == (std::string) "SurfaceNeumann" ||
                 name == (std::string) "VolumeNeumann")
             {
@@ -128,7 +228,22 @@ namespace ARTCV
                 number_of_neum_pseudo_orthopressure_conditions++;
               }
             }
+            if (name == (std::string) "SurfFlowRate" and (cond->GetIf<int>("ID") != nullptr))
+            {
+              flowrate_ids.push_back(*cond->Get<int>("ID"));
+            }
           }
+
+          // sort flow rate ids
+          std::sort(flowrate_ids.begin(), flowrate_ids.end());
+
+          if (std::adjacent_find(flowrate_ids.begin(), flowrate_ids.end()) != flowrate_ids.end())
+          {
+            dserror(
+                " I found multiple Surf Flow Rate Conditions. Please make sure that they are "
+                "distinct. The First n- Coupling Conditions IDs are reserved. ");
+          }
+
 
           if (number_of_neum_pseudo_orthopressure_conditions > 1)
           {
@@ -165,8 +280,6 @@ namespace ARTCV
 
           // perform model check
           opts_->check();
-
-          // 2=char * coupling_type="3D_1D";
 
           cvOneDSynchronizer_ =
               Teuchos::rcp(new cvOneDSynchronizer(opts_->maxStep + 1, opts_->timeStep, 2, 3));
@@ -205,7 +318,7 @@ namespace ARTCV
     }
   }
 
-  void PartitionAlg::Post_Process_Fluid(double& flowrate, double& pressure, const int cond_id)
+  void PartitionAlg::Post_Process_Fluid()
   {
     std::vector<DRT::Condition*> flowratecond;
     std::string condstring;
@@ -223,6 +336,7 @@ namespace ARTCV
 
     //  if no flowrate condition is present we do not compute anything
     if ((int)flowratecond.size() == 0) return;
+
     auto physicalType = fluidalgo_->FluidField()->PhysicalType();
 
     std::map<int, double> flowrates = FLD::UTILS::ComputeFlowRates(
@@ -231,8 +345,14 @@ namespace ARTCV
     std::map<int, double> meanPressure = FLD::UTILS::ComputeMeanPressure(
         *discret_fluid, test, condstring, INPAR::FLUID::PhysicalType::incompressible);
 
-    pressure = meanPressure[cond_id];
-    flowrate = flowrates[cond_id];
+    // store data back, since flowrate condition is set up based
+    // the ids
+    for (int id : id_list)
+    {
+      p_3d[id] = meanPressure[id];
+      q_3d[id] = flowrates[id];
+    }
+
 
     std::cout << "flowrates";
     for (const auto& [key, value] : flowrates) std::cout << '[' << key << "] = " << value << "; ";
@@ -248,45 +368,52 @@ namespace ARTCV
 
   void PartitionAlg::Start_Solve(void)
   {
-    const int coupling_id_max = 3;
-    double p_3d[coupling_id_max] = {0.0, 0.0, 0.0};
-    double p_1d[coupling_id_max] = {0.0, 0.0, 0.0};
-    double q_3d[coupling_id_max] = {0.0, 0.0, 0.0};
-    double q_1d[coupling_id_max] = {0.0, 0.0, 0.0};
-
-    int coupled_iter_max = 10;
+    // iteration count
     std::vector<int> partition_iteration_count;
+
+    // final norms
     std::vector<double> vec_q_norm;
     std::vector<double> vec_p_norm;
     std::vector<double> vec_p_norm_rel;
 
-    // Assupmtion: condition with 1 equals 1d artery flow into the domain,
-    // Conditiond with id 2 equals outflow of domain
-    int id_3d_1d = 2;
-    int id_1d_3d = 1;
-    // const int cond_id = 2;
+    // norms for conditions
+    std::vector<double> p_norm;
+    std::vector<double> q_norm;
+
+    // norms of last iteration
+    std::vector<double> p_norm_prev;
+    std::vector<double> q_norm_prev;
+
+    // indicate if condition converged
+    std::vector<bool> converged_condition;
+    std::vector<bool> norms_stayed_same;
 
     // Both time loops start from time_step 1
     for (int time_step = 1; time_step <= stepmax_; time_step++)
     {
       int iter = 0;
 
+      // initialize norms with values
+      p_norm.resize(coupling_id_max, 1e7);
+      q_norm.resize(coupling_id_max, 1e7);
+
+      p_norm_prev.resize(coupling_id_max, 1e6);
+      q_norm_prev.resize(coupling_id_max, 1e6);
+
+
+
       // we take here the next step, because this we do not call initally prep time step.
       const double t_next = fluidalgo_->FluidField()->Time() + fluidalgo_->FluidField()->Dt();
       const double t_prev = fluidalgo_->FluidField()->Time();
 
-      std::cout << "TIMES: " << t_next << " " << t_prev << std::endl;
-
       UTILS::executeSerial(comm_, [&]() { myOneDSolver_->UpdateTimeStep(); });
-
-      double p_norm_prev[coupling_id_max] = {1e7, 1e7, 1e7};
-      double p_norm[coupling_id_max] = {1e7, 1e7, 1e7};
-      double q_norm[coupling_id_max] = {1e7, 1e7, 1e7};
-      double p_norm_rel[coupling_id_max] = {1e7, 1e7, 1e7};
-
 
       while (iter < coupled_iter_max)
       {
+        // reset the convergence arrays
+        converged_condition.resize(coupling_id_max, false);
+        norms_stayed_same.resize(coupling_id_max, false);
+
         if (comm_.MyPID() == 0)
         {
           new_iter_artery = 0;
@@ -302,51 +429,43 @@ namespace ARTCV
           std::cout << "done solvin" << std::endl;
           myOneDSolver_->SynchronizeDataofStep(time_step);
           std::cout << " Synchronization completed. get values at t_next:" << t_next << std::endl;
-          p_1d[id_3d_1d] = cvOneDSynchronizer_->Get_1d_p_at_t(t_next, id_3d_1d);
-          q_1d[id_3d_1d] = cvOneDSynchronizer_->Get_1d_q_at_t(t_next, id_3d_1d);
-          p_1d[id_1d_3d] = cvOneDSynchronizer_->Get_1d_p_at_t(t_next, id_1d_3d);
-          q_1d[id_1d_3d] = cvOneDSynchronizer_->Get_1d_q_at_t(t_next, id_1d_3d);
+          for (int id = 1; id < coupling_id_max; ++id)
+          {
+            p_1d[id] = cvOneDSynchronizer_->Get_1d_p_at_t(t_next, id);
+            q_1d[id] = cvOneDSynchronizer_->Get_1d_q_at_t(t_next, id);
+          }
         }
 
-        // synch pressure to all procs
-        comm_.Broadcast(p_1d, coupling_id_max, 0);
-        comm_.Broadcast(q_1d, coupling_id_max, 0);
+        // synch pressure to all other procs
+        comm_.Broadcast(p_1d.data(), coupling_id_max + 1, 0);
+        comm_.Broadcast(q_1d.data(), coupling_id_max + 1, 0);
 
         fluidalgo_->FluidField()->SetTimeStep(t_prev, time_step);
 
-        // call coupling condition for outflow
-        // if (id_3d_1d == 2)
-        //{
-        if (p_1d[id_3d_1d] > 0)
+        // Loop through conditions and either set the neuman or flowrate according to condtion
+        for (int id = 1; id < coupling_id_max; ++id)
         {
-          std::cout << "Set_Neumann_Pressure" << std::endl;
-          Set_Neumann_Pressure(p_1d[id_3d_1d]);
+          Set_Neumann_Pressure(p_1d[id], id);
+          Set_Coupling_Flowrate(q_1d[id], id);
         }
-        //}
 
-
-        // call coupling condition for changing inflow
-        // if (id_3d_1d == 1)
-        //{
-        Set_Coupling_Flowrate(q_1d[id_1d_3d]);
-        //}
 
         fluidalgo_->FluidField()->PrepareTimeStep();
         fluidalgo_->FluidField()->Solve();
 
-        Post_Process_Fluid(q_3d[id_3d_1d], p_3d[id_3d_1d], id_3d_1d);
-        Post_Process_Fluid(q_3d[id_1d_3d], p_3d[id_1d_3d], id_1d_3d);
+        Post_Process_Fluid();
 
         UTILS::executeSerial(comm_,
             [&]()
             {
-              cvOneDSynchronizer_->Set_3d_q_at_t(t_next, q_3d[id_3d_1d], id_3d_1d);
-              cvOneDSynchronizer_->Set_3d_p_at_t(t_next, p_3d[id_3d_1d], id_3d_1d);
-              cvOneDSynchronizer_->Set_3d_q_at_t(t_next, q_3d[id_1d_3d], id_1d_3d);
-              cvOneDSynchronizer_->Set_3d_p_at_t(t_next, p_3d[id_1d_3d], id_1d_3d);
+              for (int id = 1; id < coupling_id_max; ++id)
+              {
+                cvOneDSynchronizer_->Set_3d_q_at_t(t_next, q_3d[id], id);
+                cvOneDSynchronizer_->Set_3d_p_at_t(t_next, p_3d[id], id);
+              }
             });
         Synch_Step(time_step);
-        for (int i = 0; i < coupling_id_max; ++i)
+        for (int i = 1; i < coupling_id_max; ++i)
         {
           p_norm[i] = (p_3d[i] - p_1d[i]) * (p_3d[i] - p_1d[i]);
           q_norm[i] = (abs(q_3d[i]) - abs(q_1d[i])) * (abs(q_3d[i]) - abs(q_1d[i]));
@@ -355,33 +474,45 @@ namespace ARTCV
 
         UTILS::executeSerial(comm_, [&]() { cvOneDSynchronizer_->Print(); });
 
-        // TODO this needs to be done for every condition
-        if (p_norm[0] < 1e-4 and q_norm[0] < 1e-4 and p_norm[1] < 1e-4 and q_norm[1] < 1e-4 and
-            iter)
+        // create norms for every condition
+        for (int i = 1; i < coupling_id_max; ++i)
+        {
+          if (p_norm[i] < tol_p and q_norm[i] < tol_q)
+          {
+            converged_condition[i] = true;
+          }
+
+          if ((p_norm[i] - p_norm_prev[i]) < tol_p_c and (q_norm[i] - q_norm_prev[i]) < tol_q_c)
+          {
+            norms_stayed_same[i] = true;
+          }
+        }
+
+        if (std::accumulate(converged_condition.begin() + 1, converged_condition.end(), 0) ==
+            converged_condition.size() - 1)
         {
           std::cout << "p_norm and q_norm converged" << std::endl;
           break;
         }
-        if (abs(p_norm_prev[0] - p_norm[0]) < 1e-6 and abs(p_norm_prev[1] - p_norm[1]) < 1e-6 and
-            iter > 0 and q_norm[0] < 1e-10 and q_norm[1] < 1e-10)
+        if (std::accumulate(norms_stayed_same.begin() + 1, norms_stayed_same.end(), 0) ==
+                norms_stayed_same.size() - 1 and
+            iter > 1)
         {
           std::cout << "p_rel_prev stayed same... breaking" << std::endl;
           break;
         }
-        for (int i = 0; i < coupling_id_max; ++i)
-        {
-          p_norm_prev[i] = p_norm[i];
-        }
-
+        p_norm_prev = p_norm;
+        q_norm_prev = q_norm;
 
         iter++;
       }
 
       partition_iteration_count.push_back(iter);
 
-      vec_q_norm.push_back(q_norm[1]);
-      vec_p_norm.push_back(p_norm[1]);
-      vec_p_norm_rel.push_back(p_norm[1] / p_3d[1]);
+      // TODO save this for per condition?
+      vec_q_norm.push_back(q_norm[id_list[0]]);
+      vec_p_norm.push_back(p_norm[id_list[0]]);
+      vec_p_norm_rel.push_back(p_norm[id_list[0]] / p_3d[id_list[0]]);
 
       fluidalgo_->FluidField()->Update();
       fluidalgo_->FluidField()->StatisticsAndOutput();

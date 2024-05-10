@@ -51,6 +51,17 @@ DRT::Condition::Condition(const DRT::Condition& old)
 {
 }
 
+DRT::Condition::Condition(const DRT::Condition& old, const ConditionType type)
+    : InputParameterContainer(old),
+      id_(old.id_),
+      nodes_(old.nodes_),
+      buildgeometry_(old.buildgeometry_),
+      type_(type),
+      gtype_(old.gtype_),
+      geometry_(Teuchos::null)  // since it wasn't even initialized before change to Teuchos::RCP
+{
+}
+
 std::ostream& operator<<(std::ostream& os, const DRT::Condition& cond)
 {
   cond.Print(os);
@@ -615,6 +626,12 @@ std::string DRT::Condition::Name() const
       break;
     case NodeTag:
       nameOfType += "Tagged nodes";
+      break;
+    case SurfaceCoupling1DArteryDirichletFlow:
+      nameOfType += "1D Artery Dirichlet Flow Coupling Condition";
+      break;
+    case SurfaceCoupling1DArteryNeumannPressure:
+      nameOfType += "1D Artery Neumann Pressure Coupling Condition";
       break;
     default:
       dserror("no output std::string for condition defined in DRT::Condition::Print");
