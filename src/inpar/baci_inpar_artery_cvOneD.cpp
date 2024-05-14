@@ -49,8 +49,6 @@ void INPAR::ARTCV::SetValidParameters(Teuchos::RCP<Teuchos::ParameterList> list)
 
   BACI::CORE::UTILS::IntParameter(
       "COUPLE_ITER", 10, "Number of Partitioned Iterations between the simulations", &arteryCV);
-
-  // Teuchos::ParameterList &beaminteraction = list->sublist("", false, "");
 }
 
 BACI_NAMESPACE_CLOSE

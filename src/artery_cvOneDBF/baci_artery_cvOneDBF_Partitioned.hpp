@@ -62,7 +62,6 @@ namespace ARTCV
     //! Update the dirichlet flowrate of condition with ID
     void Set_Coupling_Flowrate(const double& flowrate, const int ID);
 
-
     //! Output the Logo of the problem
     void Print_Logo(void);
 
