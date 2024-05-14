@@ -137,6 +137,9 @@ namespace ARTCV
     // tolerances compared to last iteration
     const double tol_q_c;
     const double tol_p_c;
+
+    const double tol_q_rel;
+    const double tol_p_rel;
   };
 
 }  // namespace ARTCV

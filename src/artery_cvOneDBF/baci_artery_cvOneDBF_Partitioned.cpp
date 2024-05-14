@@ -42,7 +42,11 @@ namespace ARTCV
         tol_q_c(
             GLOBAL::Problem::Instance()->Artery_cvOneDParams().get<double>("TOL_COUPLE_CHANGE_Q")),
         tol_p_c(
-            GLOBAL::Problem::Instance()->Artery_cvOneDParams().get<double>("TOL_COUPLE_CHANGE_P"))
+            GLOBAL::Problem::Instance()->Artery_cvOneDParams().get<double>("TOL_COUPLE_CHANGE_P")),
+        tol_q_rel(
+            GLOBAL::Problem::Instance()->Artery_cvOneDParams().get<double>("TOL_COUPLE_Q_REL")),
+        tol_p_rel(
+            GLOBAL::Problem::Instance()->Artery_cvOneDParams().get<double>("TOL_COUPLE_P_REL"))
   {
   }
 
@@ -197,11 +201,13 @@ namespace ARTCV
           fdyn.get<int>("NUMSTEP");
           fdyn.get<double>("TIMESTEP");
 
+          // TODO this check seems not to work...
           if ((fdyn.get<double>("TIMESTEP") - opts_->timeStep) >
               std::numeric_limits<double>::epsilon())
           {
             dserror("You are using wrong Time step sizes");
           }
+
           if ((fdyn.get<int>("NUMSTEP") - opts_->maxStep) > std::numeric_limits<int>::epsilon())
           {
             dserror("maxStep and NUMSTEP must be same in the Inputfiles");
@@ -281,8 +287,8 @@ namespace ARTCV
           // perform model check
           opts_->check();
 
-          cvOneDSynchronizer_ =
-              Teuchos::rcp(new cvOneDSynchronizer(opts_->maxStep + 1, opts_->timeStep, 2, 3));
+          cvOneDSynchronizer_ = Teuchos::rcp(
+              new cvOneDSynchronizer(opts_->maxStep + 1, opts_->timeStep, coupling_id_max - 1, 3));
 
           myOneDSolver_->setupModeluntilNewton(opts_.get(), cvOneDSynchronizer_.get());
         });
@@ -434,11 +440,13 @@ namespace ARTCV
             p_1d[id] = cvOneDSynchronizer_->Get_1d_p_at_t(t_next, id);
             q_1d[id] = cvOneDSynchronizer_->Get_1d_q_at_t(t_next, id);
           }
+          cvOneDSynchronizer_->Print();
         }
 
-        // synch pressure to all other procs
-        comm_.Broadcast(p_1d.data(), coupling_id_max + 1, 0);
-        comm_.Broadcast(q_1d.data(), coupling_id_max + 1, 0);
+        // std::cout<<cvOneDSynchronizer_->Get_1d_p_at_t(t_next, 2)<<std::endl;
+        //  synch pressure to all other procs
+        comm_.Broadcast(p_1d.data(), coupling_id_max, 0);
+        comm_.Broadcast(q_1d.data(), coupling_id_max, 0);
 
         fluidalgo_->FluidField()->SetTimeStep(t_prev, time_step);
 
@@ -478,6 +486,11 @@ namespace ARTCV
         for (int i = 1; i < coupling_id_max; ++i)
         {
           if (p_norm[i] < tol_p and q_norm[i] < tol_q)
+          {
+            converged_condition[i] = true;
+          }
+          if (p_norm[i] / (std::pow(std::max(p_3d[i], p_3d[i]), 1)) < tol_p_rel and
+              q_norm[i] / (std::pow(std::max(q_3d[i], q_3d[i]), 1)) < tol_q_rel)
           {
             converged_condition[i] = true;
           }
