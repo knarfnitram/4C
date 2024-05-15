@@ -198,17 +198,16 @@ namespace ARTCV
         [&]
         {
           const Teuchos::ParameterList& fdyn = GLOBAL::Problem::Instance()->FluidDynamicParams();
-          fdyn.get<int>("NUMSTEP");
-          fdyn.get<double>("TIMESTEP");
 
           // TODO this check seems not to work...
-          if ((fdyn.get<double>("TIMESTEP") - opts_->timeStep) >
+          if (std::abs((fdyn.get<double>("TIMESTEP") - opts_->timeStep)) >
               std::numeric_limits<double>::epsilon())
           {
-            dserror("You are using wrong Time step sizes");
+            dserror("Currently we are assuming, that the time step size must be same.");
           }
 
-          if ((fdyn.get<int>("NUMSTEP") - opts_->maxStep) > std::numeric_limits<int>::epsilon())
+          if (std::abs((fdyn.get<int>("NUMSTEP") - opts_->maxStep)) >
+              std::numeric_limits<int>::epsilon())
           {
             dserror("maxStep and NUMSTEP must be same in the Inputfiles");
           }
