@@ -206,7 +206,7 @@ namespace ARTCV
             dserror("Currently we are assuming, that the time step size must be same.");
           }
 
-          if (std::abs((fdyn.get<int>("NUMSTEP") - opts_->maxStep)) >
+          if (std::abs((fdyn.get<int>("NUMSTEP") - opts_->maxStep)) <
               std::numeric_limits<int>::epsilon())
           {
             dserror("maxStep and NUMSTEP must be same in the Inputfiles");
