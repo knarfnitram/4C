@@ -488,8 +488,8 @@ namespace ARTCV
           {
             converged_condition[i] = true;
           }
-          if (p_norm[i] / (std::pow(std::max(p_3d[i], p_3d[i]), 1)) < tol_p_rel and
-              q_norm[i] / (std::pow(std::max(q_3d[i], q_3d[i]), 1)) < tol_q_rel)
+          if (sqrt(p_norm[i]) / (std::pow(std::max(p_3d[i], p_3d[i]), 1)) < tol_p_rel and
+              sqrt(q_norm[i]) / (std::pow(std::max(q_3d[i], q_3d[i]), 1)) < tol_q_rel)
           {
             converged_condition[i] = true;
           }
