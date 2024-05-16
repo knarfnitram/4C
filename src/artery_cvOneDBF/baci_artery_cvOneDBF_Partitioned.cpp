@@ -268,7 +268,6 @@ namespace ARTCV
 
 
     string inputfile = art_params.get<string>("cvOneD_Inputfile");
-    std::cout << "inputfile:" << inputfile << std::endl;
 
 
     UTILS::executeSerial(comm_,
@@ -359,14 +358,14 @@ namespace ARTCV
     }
 
 
-    std::cout << "flowrates";
+    /*std::cout << "flowrates";
     for (const auto& [key, value] : flowrates) std::cout << '[' << key << "] = " << value << "; ";
     std::cout << '\n';
 
     std::cout << "meanPressure";
     for (const auto& [key, value] : meanPressure)
       std::cout << '[' << key << "] = " << value << "; ";
-    std::cout << '\n';
+    std::cout << '\n';*/
   }
 
   void PartitionAlg::Initialize_Coupling() {}
@@ -431,18 +430,15 @@ namespace ARTCV
             }
           }
 
-          std::cout << "done solvin" << std::endl;
           myOneDSolver_->SynchronizeDataofStep(time_step);
-          std::cout << " Synchronization completed. get values at t_next:" << t_next << std::endl;
           for (int id = 1; id < coupling_id_max; ++id)
           {
             p_1d[id] = cvOneDSynchronizer_->Get_1d_p_at_t(t_next, id);
             q_1d[id] = cvOneDSynchronizer_->Get_1d_q_at_t(t_next, id);
           }
-          cvOneDSynchronizer_->Print();
         }
 
-        // std::cout<<cvOneDSynchronizer_->Get_1d_p_at_t(t_next, 2)<<std::endl;
+
         //  synch pressure to all other procs
         comm_.Broadcast(p_1d.data(), coupling_id_max, 0);
         comm_.Broadcast(q_1d.data(), coupling_id_max, 0);
@@ -456,6 +452,9 @@ namespace ARTCV
           Set_Coupling_Flowrate(q_1d[id], id);
         }
 
+        const Teuchos::RCP<DRT::Discretization>& fluid_dis =
+            fluidalgo_->FluidField()->Discretization();
+        fluid_dis->FillComplete();
 
         fluidalgo_->FluidField()->PrepareTimeStep();
         fluidalgo_->FluidField()->Solve();
@@ -504,7 +503,10 @@ namespace ARTCV
         if ((long unsigned int)std::accumulate(converged_condition.begin() + 1,
                 converged_condition.end(), 0) == converged_condition.size() - 1)
         {
-          std::cout << "p_norm and q_norm converged" << std::endl;
+          if (comm_.MyPID() == 0)
+          {
+            std::cout << "p_norm and q_norm converged" << std::endl;
+          }
           break;
         }
         // TODO this makes no sense, always breaks at iter=5!
@@ -512,7 +514,10 @@ namespace ARTCV
                  norms_stayed_same.end(), 0) == norms_stayed_same.size() - 1) and
             iter > 4)
         {
-          std::cout << "p_rel_prev stayed same... breaking" << std::endl;
+          if (comm_.MyPID() == 0)
+          {
+            std::cout << "p_rel_prev stayed same... breaking" << std::endl;
+          }
           break;
         }
         p_norm_prev = p_norm;
