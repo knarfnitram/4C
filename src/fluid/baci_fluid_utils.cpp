@@ -983,9 +983,9 @@ std::map<int, double> FLD::UTILS::ComputeMeanPressure(DRT::Discretization& dis,
     global_area[condID] = area;
     global_mean_pressure[condID] = pressint / area;
 
-    if (dis.DofRowMap()->Comm().MyPID() == 0)
-      std::cout << "gobal area = " << global_area[condID] << "\t condition ID = " << condID
-                << "mean pressure " << global_mean_pressure[condID] << std::endl;
+    // if (dis.DofRowMap()->Comm().MyPID() == 0)
+    //   std::cout << "gobal area = " << global_area[condID] << "\t condition ID = " << condID
+    //            << "mean pressure " << global_mean_pressure[condID] << std::endl;
   }
 
   return global_mean_pressure;

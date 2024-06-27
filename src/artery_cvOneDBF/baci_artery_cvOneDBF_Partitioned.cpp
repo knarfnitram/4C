@@ -57,6 +57,7 @@ namespace ARTCV
 
     // Create Coupling Pressure and Inflow Conditions according
     Teuchos::RCP<DRT::Discretization> actdis = GLOBAL::Problem::Instance()->GetDis("fluid");
+
     std::vector<DRT::Condition*> neumann_coupling_conditions;
     actdis->GetCondition("SurfaceCoupling1DArteryNeumannPressure", neumann_coupling_conditions);
 
@@ -105,6 +106,7 @@ namespace ARTCV
       new_flowrate_cond->Add("ConditionID", *icc->Get<int>("ID"));
       actdis->SetCondition("SurfFlowRate", new_flowrate_cond);
     }
+
 
     // create instance of fluid basis algorithm
     fluidalgo_ = Teuchos::rcp(new ADAPTER::FluidBaseAlgorithm(fdyn, fdyn, "fluid", false));
@@ -443,7 +445,20 @@ namespace ARTCV
         comm_.Broadcast(p_1d.data(), coupling_id_max, 0);
         comm_.Broadcast(q_1d.data(), coupling_id_max, 0);
 
+
+        //          for (const auto& elem : p_1d) {
+        //              std::cout << "p_1d " << comm_.MyPID() <<" " << elem << " ";
+        //          }
+        //          std::cout << std::endl;
+        //
+        //          for (const auto& elem : q_1d) {
+        //              std::cout << "q_1d " << comm_.MyPID() <<" " << elem << " ";
+        //          }
+        //          std::cout << std::endl;
+
+
         fluidalgo_->FluidField()->SetTimeStep(t_prev, time_step);
+
 
         // Loop through conditions and either set the neuman or flowrate according to condtion
         for (int id = 1; id < coupling_id_max; ++id)
@@ -451,25 +466,26 @@ namespace ARTCV
           Set_Neumann_Pressure(p_1d[id], id);
           Set_Coupling_Flowrate(q_1d[id], id);
         }
+        comm_.Barrier();
 
-        const Teuchos::RCP<DRT::Discretization>& fluid_dis =
-            fluidalgo_->FluidField()->Discretization();
-        fluid_dis->FillComplete();
+        // const Teuchos::RCP<DRT::Discretization>& fluid_dis =
+        //    fluidalgo_->FluidField()->Discretization();
+        // fluid_dis->FillComplete();
 
         fluidalgo_->FluidField()->PrepareTimeStep();
+        comm_.Barrier();
         fluidalgo_->FluidField()->Solve();
 
         Post_Process_Fluid();
 
-        UTILS::executeSerial(comm_,
-            [&]()
-            {
-              for (int id = 1; id < coupling_id_max; ++id)
-              {
-                cvOneDSynchronizer_->Set_3d_q_at_t(t_next, q_3d[id], id);
-                cvOneDSynchronizer_->Set_3d_p_at_t(t_next, p_3d[id], id);
-              }
-            });
+        if (comm_.MyPID() == 0)
+        {
+          for (int id = 1; id < coupling_id_max; ++id)
+          {
+            cvOneDSynchronizer_->Set_3d_q_at_t(t_next, q_3d[id], id);
+            cvOneDSynchronizer_->Set_3d_p_at_t(t_next, p_3d[id], id);
+          }
+        }
         Synch_Step(time_step);
         for (int i = 1; i < coupling_id_max; ++i)
         {
@@ -478,7 +494,7 @@ namespace ARTCV
         }
 
 
-        UTILS::executeSerial(comm_, [&]() { cvOneDSynchronizer_->Print(); });
+        UTILS::executeSerial(comm_, [&]() { cvOneDSynchronizer_->Print_at_timestep(time_step); });
 
         // create norms for every condition
         for (int i = 1; i < coupling_id_max; ++i)
@@ -537,8 +553,12 @@ namespace ARTCV
       fluidalgo_->FluidField()->StatisticsAndOutput();
 
       comm_.Barrier();
-      UTILS::executeSerial(
-          comm_, [&]() { myOneDSolver_->UpdateSolution(new_iter_artery, time_step_artery); });
+      UTILS::executeSerial(comm_,
+          [&]()
+          {
+            // myOneDSolver_->DoPostProcessingofStep(time_step);
+            myOneDSolver_->UpdateSolution(new_iter_artery, time_step_artery);
+          });
     }
 
     if (comm_.MyPID() == 0)
