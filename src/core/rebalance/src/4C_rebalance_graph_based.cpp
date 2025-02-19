@@ -41,8 +41,8 @@ Core::Rebalance::rebalance_node_maps(const Core::LinAlg::Graph& initialGraph,
   TEUCHOS_FUNC_TIME_MONITOR("Rebalance::rebalance_node_maps");
 
   // Compute rebalanced graph
-  Teuchos::RCP<Core::LinAlg::Graph> balanced_graph = Rebalance::rebalance_graph(initialGraph,
-      rebalanceParams, initialNodeWeights, initialEdgeWeights, initialNodeCoordinates);
+  auto balanced_graph = Rebalance::rebalance_graph(initialGraph, rebalanceParams,
+      initialNodeWeights, initialEdgeWeights, initialNodeCoordinates);
 
   // extract repartitioned maps
   std::shared_ptr<Epetra_Map> rownodes =
@@ -57,7 +57,7 @@ Core::Rebalance::rebalance_node_maps(const Core::LinAlg::Graph& initialGraph,
 
 /*----------------------------------------------------------------------*/
 /*----------------------------------------------------------------------*/
-Teuchos::RCP<Core::LinAlg::Graph> Core::Rebalance::rebalance_graph(
+std::shared_ptr<Core::LinAlg::Graph> Core::Rebalance::rebalance_graph(
     const Core::LinAlg::Graph& initialGraph, const Teuchos::ParameterList& rebalanceParams,
     const std::shared_ptr<Core::LinAlg::Vector<double>>& initialNodeWeights,
     const std::shared_ptr<Epetra_CrsMatrix>& initialEdgeWeights,
@@ -74,17 +74,19 @@ Teuchos::RCP<Core::LinAlg::Graph> Core::Rebalance::rebalance_graph(
   Teuchos::RCP<Isorropia::Epetra::Partitioner> partitioner;
   if (initialNodeCoordinates)
   {
-    partitioner = Teuchos::make_rcp<Isorropia::Epetra::Partitioner>(&initialGraph, &costs,
+    partitioner = Teuchos::make_rcp<Isorropia::Epetra::Partitioner>(
+        &initialGraph.get_ref_of_Epetra_CrsGraph(), &costs,
         initialNodeCoordinates->get_ptr_of_Epetra_MultiVector().get(), nullptr, rebalanceParams);
   }
   else
   {
-    partitioner =
-        Teuchos::make_rcp<Isorropia::Epetra::Partitioner>(&initialGraph, &costs, rebalanceParams);
+    partitioner = Teuchos::make_rcp<Isorropia::Epetra::Partitioner>(
+        &initialGraph.get_ref_of_Epetra_CrsGraph(), &costs, rebalanceParams);
   }
 
   Isorropia::Epetra::Redistributor rd(partitioner);
-  Teuchos::RCP<Core::LinAlg::Graph> balancedGraph = rd.redistribute(initialGraph, true);
+  auto balancedGraph = std::make_shared<Core::LinAlg::Graph>(
+      *rd.redistribute(initialGraph.get_ref_of_Epetra_CrsGraph(), true));
 
   balancedGraph->FillComplete();
   balancedGraph->OptimizeStorage();
@@ -385,7 +387,8 @@ std::shared_ptr<const Core::LinAlg::Graph> Core::Rebalance::build_monolithic_nod
   Epetra_Import importer(my_colliding_primitives_map, *dis.element_row_map());
   Core::LinAlg::Graph my_colliding_primitives_connectivity(
       Copy, my_colliding_primitives_map, n_nodes_per_element_max, false);
-  err = my_colliding_primitives_connectivity.Import(element_connectivity, importer, Insert);
+  err = my_colliding_primitives_connectivity.Import(
+      *element_connectivity.get_ptr_of_Epetra_CrsGraph(), importer, Insert);
   if (err != 0) FOUR_C_THROW("Core::LinAlg::Graph::Import returned %d", err);
 
   // 4. Build and fill the graph with element internal connectivities
@@ -446,7 +449,7 @@ std::shared_ptr<const Core::LinAlg::Graph> Core::Rebalance::build_monolithic_nod
 
   my_graph->GlobalAssemble(true);
   my_graph->OptimizeStorage();
-
-  return my_graph;
+  // cast graph
+  return std::make_shared<const Core::LinAlg::Graph>(static_cast<Epetra_CrsGraph>(*my_graph));
 }
 FOUR_C_NAMESPACE_CLOSE
