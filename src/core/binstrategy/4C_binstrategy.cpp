@@ -1244,8 +1244,7 @@ Core::Binstrategy::BinningStrategy::weighted_distribution_of_bins_to_procs(
   else
     sublist.set("LB_APPROACH", "PARTITION");
 
-  Teuchos::RCP<Core::LinAlg::Graph> balanced_bingraph =
-      Core::Rebalance::rebalance_graph(*bingraph, paramlist, vweights);
+  auto balanced_bingraph = Core::Rebalance::rebalance_graph(*bingraph, paramlist, vweights);
 
   // extract repartitioned bin row map
   const Epetra_BlockMap& rbinstmp = balanced_bingraph->RowMap();
@@ -1439,7 +1438,7 @@ void Core::Binstrategy::BinningStrategy::standard_discretization_ghosting(
 
   newnodegraph = std::make_shared<Core::LinAlg::Graph>(Copy, *newnoderowmap, 108, false);
   Epetra_Export exporter(initgraph->RowMap(), *newnoderowmap);
-  int err = newnodegraph->Export(*initgraph, exporter, Add);
+  int err = newnodegraph->Export(*initgraph->get_ptr_of_Epetra_CrsGraph(), exporter, Add);
   if (err < 0) FOUR_C_THROW("Graph export returned err=%d", err);
   newnodegraph->FillComplete();
   newnodegraph->OptimizeStorage();

@@ -75,9 +75,9 @@ namespace Core::Rebalance
   @param[in] initialEdgeWeights Initial weights of the graph edges
   @param[in] initialNodeCoordinates Coordinates of the discretization
 
-  @return Rebalanced graph
+  @return std::shared_ptr<Core::LinAlg::Graph>
   */
-  Teuchos::RCP<Core::LinAlg::Graph> rebalance_graph(const Core::LinAlg::Graph& initialGraph,
+  std::shared_ptr<Core::LinAlg::Graph> rebalance_graph(const Core::LinAlg::Graph& initialGraph,
       const Teuchos::ParameterList& rebalanceParams,
       const std::shared_ptr<Core::LinAlg::Vector<double>>& initialNodeWeights = nullptr,
       const std::shared_ptr<Epetra_CrsMatrix>& initialEdgeWeights = nullptr,
