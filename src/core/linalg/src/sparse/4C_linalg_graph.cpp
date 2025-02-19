@@ -16,19 +16,19 @@ FOUR_C_NAMESPACE_OPEN
 
 
 Core::LinAlg::Graph::Graph(const Epetra_CrsGraph& Source)
-    : graph_(std::make_shared<Epetra_CrsGraph>(Source))
+    : graph_(std::make_shared<Core::LinAlg::Graph>(Source))
 {
 }
 
 Core::LinAlg::Graph::Graph(Epetra_DataAccess CV, const Epetra_BlockMap& RowMap,
     const int* NumIndicesPerRow, bool StaticProfile)
-    : graph_(std::make_shared<Epetra_CrsGraph>(CV, RowMap, NumIndicesPerRow, StaticProfile))
+    : graph_(std::make_shared<Core::LinAlg::Graph>(CV, RowMap, NumIndicesPerRow, StaticProfile))
 {
 }
 
 Core::LinAlg::Graph::Graph(
     Epetra_DataAccess CV, const Epetra_BlockMap& RowMap, int NumIndicesPerRow, bool StaticProfile)
-    : graph_(std::make_shared<Epetra_CrsGraph>(CV, RowMap, NumIndicesPerRow, StaticProfile))
+    : graph_(std::make_shared<Core::LinAlg::Graph>(CV, RowMap, NumIndicesPerRow, StaticProfile))
 {
 }
 

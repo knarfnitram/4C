@@ -903,7 +903,7 @@ void CONTACT::Interface::redistribute()
 
   //**********************************************************************
   // call parallel redistribution
-  std::shared_ptr<const Epetra_CrsGraph> slaveCloseNodeGraph =
+  std::shared_ptr<const Core::LinAlg::Graph> slaveCloseNodeGraph =
       Core::Rebalance::build_graph(*idiscret_, slaveCloseRowEles);
 
   Teuchos::ParameterList slaveCloseRebalanceParams;
@@ -930,7 +930,7 @@ void CONTACT::Interface::redistribute()
 
   //**********************************************************************
   // call parallel redistribution
-  std::shared_ptr<const Epetra_CrsGraph> slaveNonCloseNodeGraph =
+  std::shared_ptr<const Core::LinAlg::Graph> slaveNonCloseNodeGraph =
       Core::Rebalance::build_graph(*idiscret_, slaveNonCloseRowEles);
 
   Teuchos::ParameterList slaveNonCloseRebalanceParams;
@@ -1019,7 +1019,7 @@ void CONTACT::Interface::redistribute()
   std::shared_ptr<Core::LinAlg::Graph> outgraph =
       std::make_shared<Core::LinAlg::Graph>(Copy, *srownodes, 108, false);
   Epetra_Export exporter(graph->RowMap(), *srownodes);
-  int err = outgraph->Export(*graph->get_ptr_of_Epetra_CrsGraph(), exporter, Add);
+  int err = outgraph->Export(*graph->get_ptr_of_Core::LinAlg::Graph(), exporter, Add);
   if (err < 0) FOUR_C_THROW("Graph export returned err=%d", err);
 
   // trash old graph
@@ -7125,8 +7125,9 @@ bool CONTACT::Interface::update_active_set_semi_smooth()
     if (not cnode->active())
     {
       // check for penetration and/or tensile contact forces
-      if (nz - cn * wgap > 0)  // no averaging of Lagrange multipliers
-      // if ((0.5*nz+0.5*nzold) - cn*wgap > 0) // averaging of Lagrange multipliers
+      if (nz - cn * wgap >
+          0)  // no averaging of Lagrange multipliers
+              // if ((0.5*nz+0.5*nzold) - cn*wgap > 0) // averaging of Lagrange multipliers
       {
         cnode->active() = true;
         localcheck = false;
@@ -7147,8 +7148,9 @@ bool CONTACT::Interface::update_active_set_semi_smooth()
       nz += adhbound;
 
       // check for tensile contact forces and/or penetration
-      if (nz - cn * wgap <= 0)  // no averaging of Lagrange multipliers
-      // if ((0.5*nz+0.5*nzold) - cn*wgap <= 0) // averaging of Lagrange multipliers
+      if (nz - cn * wgap <=
+          0)  // no averaging of Lagrange multipliers
+              // if ((0.5*nz+0.5*nzold) - cn*wgap <= 0) // averaging of Lagrange multipliers
       {
         cnode->active() = false;
         localcheck = false;

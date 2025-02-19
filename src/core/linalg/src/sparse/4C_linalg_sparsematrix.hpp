@@ -92,7 +92,7 @@ namespace Core::LinAlg
     template <typename... T>
     SparseMatrix(T...) = delete;
     /// construction of sparse matrix
-    SparseMatrix(std::shared_ptr<Epetra_CrsGraph> crsgraph,
+    SparseMatrix(std::shared_ptr<Core::LinAlg::Graph> crsgraph,
         std::shared_ptr<Core::LinAlg::MultiMapExtractor> dbcmaps);
 
     /// construction of sparse matrix
@@ -365,7 +365,7 @@ namespace Core::LinAlg
 
    private:
     /// saved graph (if any)
-    std::shared_ptr<Epetra_CrsGraph> graph_;
+    std::shared_ptr<Core::LinAlg::Graph> graph_;
 
     /// Dirichlet row map (if known)
     std::shared_ptr<Core::LinAlg::MultiMapExtractor> dbcmaps_;

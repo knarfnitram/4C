@@ -11,7 +11,8 @@
 
 #include "4C_config.hpp"
 
-#include <Epetra_CrsGraph.h>
+#include "4C_linalg_graph.hpp"
+
 #include <Epetra_Export.h>
 
 #include <memory>
@@ -51,7 +52,7 @@ namespace Core::LinAlg
 
     Epetra_CrsGraph& get_ref_of_Epetra_CrsGraph() { return *graph_; }
 
-    std::shared_ptr<Epetra_CrsGraph> get_ptr_of_Epetra_CrsGraph() { return graph_; }
+    std::shared_ptr<Core::LinAlg::Graph> get_ptr_of_Epetra_CrsGraph() { return graph_; }
 
 
     // Functions
@@ -85,12 +86,12 @@ namespace Core::LinAlg
 
     const Epetra_BlockMap& RowMap() const { return graph_->RowMap(); }
 
-    explicit Graph(const std::shared_ptr<Epetra_CrsGraph>& graph);
+    explicit Graph(const std::shared_ptr<Core::LinAlg::Graph>& graph);
 
 
    private:
     //! The actual Epetra_CrsGraph object.
-    std::shared_ptr<Epetra_CrsGraph> graph_;
+    std::shared_ptr<Core::LinAlg::Graph> graph_;
   };
 }  // namespace Core::LinAlg
 FOUR_C_NAMESPACE_CLOSE
