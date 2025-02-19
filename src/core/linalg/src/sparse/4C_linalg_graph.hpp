@@ -148,7 +148,7 @@ namespace Core::LinAlg
 
     const Epetra_BlockMap& RowMap() const { return graph_->RowMap(); }
 
-    explicit Graph(const std::shared_ptr<Epetra_CrsGraph>& graph);
+    explicit Graph(const std::shared_ptr<Core::LinAlg::Graph>& graph);
 
 
    private:
