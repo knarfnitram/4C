@@ -87,20 +87,20 @@ namespace Core::LinAlg
     const Epetra_Export* Exporter() { return graph_->Exporter(); };
 
     int Export(const Epetra_SrcDistObject& A, const Epetra_Export& Exporter,
-        Epetra_CombineMode CombineMode, const Epetra_OffsetIndex* Indexor = 0)
+        Epetra_CombineMode CombineMode, const Epetra_OffsetIndex* Indexor = nullptr)
     {
       return graph_->Export(A, Exporter, CombineMode, Indexor);
     }
 
     //! Transform to local index space. Perform other operations to allow optimal matrix operations.
-    int FillComplete() const { return graph_->FillComplete(); }
+    int FillComplete() { return graph_->FillComplete(); }
 
     //! If FillComplete() has been called, this query returns true, otherwise it returns false.
     bool Filled() const { return (graph_->Filled()); }
 
     //! Imports an Epetra_DistObject using the Epetra_Import object.
     int Import(const Epetra_SrcDistObject& A, const Epetra_Import& Importer,
-        Epetra_CombineMode CombineMode, const Epetra_OffsetIndex* Indexor = 0)
+        Epetra_CombineMode CombineMode, const Epetra_OffsetIndex* Indexor = nullptr)
     {
       return graph_->Import(A, Importer, CombineMode, Indexor);
     }
@@ -108,15 +108,8 @@ namespace Core::LinAlg
     //! Enter a list of elements in a specified global row of the graph.
     int InsertGlobalIndices(int GlobalRow, int NumIndices, int* Indices);
 
-    int InsertGlobalIndices(long long GlobalRow, int NumIndices, long long* Indices);
-
     //! Get a view of the elements in a specified global row of the graph.
     int ExtractGlobalRowView(int GlobalRow, int& NumIndices, int*& Indices) const
-    {
-      return graph_->ExtractGlobalRowView(GlobalRow, NumIndices, Indices);
-    }
-
-    int ExtractGlobalRowView(long long GlobalRow, int& NumIndices, long long*& Indices) const
     {
       return graph_->ExtractGlobalRowView(GlobalRow, NumIndices, Indices);
     }
@@ -135,7 +128,7 @@ namespace Core::LinAlg
 
     //! Make consecutive row index sections contiguous, minimize internal storage used for
     //! constructing graph
-    int OptimizeStorage() const { return graph_->OptimizeStorage(); }
+    int OptimizeStorage() { return graph_->OptimizeStorage(); }
 
     //! Returns the number of indices in the global graph.
     int NumGlobalNonzeros() const { return graph_->NumGlobalNonzeros(); }
@@ -143,13 +136,7 @@ namespace Core::LinAlg
     //! Remove a list of elements from a specified global row of the graph.
     int RemoveGlobalIndices(int GlobalRow, int NumIndices, int* Indices);
 
-    int RemoveGlobalIndices(long long GlobalRow, int NumIndices, long long* Indices);
-
-
     const Epetra_BlockMap& RowMap() const { return graph_->RowMap(); }
-
-    explicit Graph(const std::shared_ptr<Core::LinAlg::Graph>& graph);
-
 
    private:
     //! The actual Epetra_CrsGraph object.
