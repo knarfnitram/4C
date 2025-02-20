@@ -3165,61 +3165,61 @@ void CONTACT::Interface::post_evaluate(const int step, const int iter)
       return;
       break;
     }
-      //*********************************
-      // Gauss-Point-To-Segment (GPTS)
-      //*********************************
+    //*********************************
+    // Gauss-Point-To-Segment (GPTS)
+    //*********************************
     case Inpar::Mortar::algorithm_gpts:
     {
       // already stored
       return;
       break;
     }
-      //*********************************
-      // Line-to-Segment Coupling (3D)
-      //*********************************
+    //*********************************
+    // Line-to-Segment Coupling (3D)
+    //*********************************
     case Inpar::Mortar::algorithm_lts:
     {
       // store lts into mortar data container
       store_lt_svalues();
       break;
     }
-      //*********************************
-      // Node-to-Segment Coupling (2D/3D)
-      //*********************************
+    //*********************************
+    // Node-to-Segment Coupling (2D/3D)
+    //*********************************
     case Inpar::Mortar::algorithm_nts:
     {
       // store nts into mortar data container
       store_nt_svalues();
       break;
     }
-      //*********************************
-      // line-to-line Coupling (3D)
-      //*********************************
+    //*********************************
+    // line-to-line Coupling (3D)
+    //*********************************
     case Inpar::Mortar::algorithm_ltl:
     {
       return;
       break;
     }
-      //*********************************
-      // Node-to-Line Coupling (3D)
-      //*********************************
+    //*********************************
+    // Node-to-Line Coupling (3D)
+    //*********************************
     case Inpar::Mortar::algorithm_ntl:
     {
       FOUR_C_THROW("not yet implemented!");
       break;
     }
-      //*********************************
-      // Segment-to-Line Coupling (3D)
-      //*********************************
+    //*********************************
+    // Segment-to-Line Coupling (3D)
+    //*********************************
     case Inpar::Mortar::algorithm_stl:
     {
       // store lts into mortar data container
       store_lt_svalues();
       break;
     }
-      //*********************************
-      // Default case
-      //*********************************
+    //*********************************
+    // Default case
+    //*********************************
     default:
     {
       FOUR_C_THROW("Unknown discr. type for constraints!");

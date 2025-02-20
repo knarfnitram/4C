@@ -37,11 +37,8 @@ namespace Core::Communication
 namespace Core::LinAlg
 {
   class SparseOperator;
-
   class MapExtractor;
-
   class SerialDenseVector;
-
   class SerialDenseMatrix;
 }  // namespace Core::LinAlg
 
@@ -58,7 +55,6 @@ namespace Core::Conditions
 namespace Core::Elements
 {
   class Element;
-
   class LocationArray;
 }  // namespace Core::Elements
 
@@ -84,16 +80,25 @@ namespace Core::FE
   */
   struct OptionsRedistribution
   {
-    bool assign_degrees_of_freedom = true;  //  if true, resets existing dofsets and performs
-    // assigning of degrees of freedoms
-    //  to nodes and elements.
-    bool init_elements = true;  // if true, build element register classes and call
-    // initialize() on each type of finite element present
-    bool do_boundary_conditions = true;  // if true, build geometry of boundary conditions
-    // present.
-    bool kill_dofs = true;              // if true, reset existing dofsets in discretization
-    bool kill_cond = true;              // if true, reset existing conditions in discretization
-    bool do_extended_ghosting = false;  // if true, extended ghosting is applied
+    //! reset existing dofsets and performs assigning of degrees of freedoms to nodes and elements
+    //! if true
+    bool assign_degrees_of_freedom = true;
+
+    //! build element register classes and call initialize() on each type of finite element present
+    //! if true
+    bool init_elements = true;
+
+    //!  build geometry of boundary conditions present if true
+    bool do_boundary_conditions = true;
+
+    //! reset existing dofsets in discretization
+    bool kill_dofs = true;
+
+    //! reset existing conditions in discretization
+    bool kill_cond = true;
+
+    //! extended ghosting is applied if true
+    bool do_extended_ghosting = false;
   };
 
   /*!

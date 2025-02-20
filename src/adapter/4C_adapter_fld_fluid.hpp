@@ -30,11 +30,8 @@ FOUR_C_NAMESPACE_OPEN
 namespace Core::LinAlg
 {
   class SparseMatrix;
-
   class BlockSparseMatrixBase;
-
   class MapExtractor;
-
   class Solver;
 }  // namespace Core::LinAlg
 
@@ -61,9 +58,7 @@ namespace Core::IO
 namespace FLD
 {
   class TurbulenceStatisticManager;
-
   class DynSmagFilter;
-
   class Vreman;
   namespace Utils
   {

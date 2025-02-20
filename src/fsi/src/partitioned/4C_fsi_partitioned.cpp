@@ -100,8 +100,9 @@ void FSI::Partitioned::setup_coupling(const Teuchos::ParameterList& fsidyn, MPI_
            (Global::Problem::instance()->get_problem_type() == Core::ProblemType::fsi_xfem) and
            (Global::Problem::instance()->get_problem_type() != Core::ProblemType::fbi))
   {
-    matchingnodes_ = true;  // matching between structure and boundary dis! non-matching between
-    // boundary dis and fluid is handled bei XFluid itself
+    // matching between structure and boundary dis! non-matching between boundary dis and fluid is
+    // handled bei XFluid itself
+    matchingnodes_ = true;
     const int ndim = Global::Problem::instance()->n_dim();
 
     std::shared_ptr<Adapter::FluidXFEM> x_movingboundary =

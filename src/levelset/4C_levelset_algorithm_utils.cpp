@@ -277,8 +277,8 @@ void ScaTra::LevelSetAlgorithm::evaluate_error_compared_to_analytical_sol()
         discret_->evaluate_scalars(eleparams, errors);
         discret_->clear_state();
 
-        double errL1 = (*errors)[0] / (*errors)[1];  // division by thickness of element layer for
-        // 2D problems with domain size 1
+        // division by thickness of element layer for 2D problems with domain size 1
+        double errL1 = (*errors)[0] / (*errors)[1];
         Core::LinAlg::Vector<double> phidiff(*phinp_);
         phidiff.Update(-1.0, *phiref, 1.0);
         double errLinf = 0.0;
