@@ -1438,7 +1438,7 @@ void Core::Binstrategy::BinningStrategy::standard_discretization_ghosting(
 
   newnodegraph = std::make_shared<Core::LinAlg::Graph>(Copy, *newnoderowmap, 108, false);
   Epetra_Export exporter(initgraph->RowMap(), *newnoderowmap);
-  int err = newnodegraph->Export(*initgraph->get_ptr_of_Epetra_CrsGraph(), exporter, Add);
+  int err = newnodegraph->Export(initgraph->get_Epetra_CrsGraph(), exporter, Add);
   if (err < 0) FOUR_C_THROW("Graph export returned err=%d", err);
   newnodegraph->FillComplete();
   newnodegraph->OptimizeStorage();

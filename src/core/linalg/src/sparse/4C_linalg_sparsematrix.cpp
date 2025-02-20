@@ -25,7 +25,7 @@ Core::LinAlg::SparseMatrix::SparseMatrix(std::shared_ptr<Core::LinAlg::Graph> cr
     std::shared_ptr<Core::LinAlg::MultiMapExtractor> dbcmaps)
     : explicitdirichlet_(true), savegraph_(true), matrixtype_(CRS_MATRIX)
 {
-  sysmat_ = std::make_shared<Epetra_CrsMatrix>(::Copy, *crsgraph->get_ptr_of_Epetra_CrsGraph());
+  sysmat_ = std::make_shared<Epetra_CrsMatrix>(::Copy, crsgraph->get_Epetra_CrsGraph());
   graph_ = crsgraph;
   dbcmaps_ = dbcmaps;
 }
@@ -298,9 +298,9 @@ void Core::LinAlg::SparseMatrix::zero()
     // new matrix in memory at the same time!
     sysmat_ = nullptr;
     if (matrixtype_ == CRS_MATRIX)
-      sysmat_ = std::make_shared<Epetra_CrsMatrix>(::Copy, *graph_->get_ptr_of_Epetra_CrsGraph());
+      sysmat_ = std::make_shared<Epetra_CrsMatrix>(::Copy, graph_->get_Epetra_CrsGraph());
     else if (matrixtype_ == FE_MATRIX)
-      sysmat_ = std::make_shared<Epetra_FECrsMatrix>(::Copy, *graph_->get_ptr_of_Epetra_CrsGraph());
+      sysmat_ = std::make_shared<Epetra_FECrsMatrix>(::Copy, graph_->get_Epetra_CrsGraph());
     else
       FOUR_C_THROW("matrix type is not correct");
 

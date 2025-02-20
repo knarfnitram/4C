@@ -1019,7 +1019,7 @@ void CONTACT::Interface::redistribute()
   std::shared_ptr<Core::LinAlg::Graph> outgraph =
       std::make_shared<Core::LinAlg::Graph>(Copy, *srownodes, 108, false);
   Epetra_Export exporter(graph->RowMap(), *srownodes);
-  int err = outgraph->Export(*graph->get_ptr_of_Epetra_CrsGraph(), exporter, Add);
+  int err = outgraph->Export(graph->get_Epetra_CrsGraph(), exporter, Add);
   if (err < 0) FOUR_C_THROW("Graph export returned err=%d", err);
 
   // trash old graph

@@ -1133,7 +1133,7 @@ void Core::Conditions::PeriodicBoundaryConditions::redistribute_and_create_dof_c
 
     {
       Epetra_Export exporter(*discret_->node_row_map(), *newrownodemap);
-      int err = nodegraph.Export(*oldnodegraph->get_ptr_of_Epetra_CrsGraph(), exporter, Add);
+      int err = nodegraph.Export(oldnodegraph->get_Epetra_CrsGraph(), exporter, Add);
       if (err < 0) FOUR_C_THROW("Graph export returned err=%d", err);
     }
     nodegraph.FillComplete();

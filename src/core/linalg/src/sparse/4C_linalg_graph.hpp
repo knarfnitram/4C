@@ -17,11 +17,6 @@
 
 #include <memory>
 
-// Do not lint the file for identifier names, since the naming of the Wrapper functions follow the
-// naming of the Epetra_Vector
-
-// NOLINTBEGIN(readability-identifier-naming)
-
 FOUR_C_NAMESPACE_OPEN
 
 namespace Core::LinAlg
@@ -49,14 +44,10 @@ namespace Core::LinAlg
     /// Copy constructor from Epetra_FECrsGraph to vector
     explicit Graph(const Epetra_FECrsGraph& Source);
 
+    //! return the reference to the Epetra_CrsGraph
+    const Epetra_CrsGraph& get_Epetra_CrsGraph() const { return *graph_; }
 
-    //! (Implicit) conversions: they all return references or RCPs, never copies
-    const Epetra_CrsGraph& get_ref_of_Epetra_CrsGraph() const { return *graph_; }
-
-    Epetra_CrsGraph& get_ref_of_Epetra_CrsGraph() { return *graph_; }
-
-    std::shared_ptr<Epetra_CrsGraph> get_ptr_of_Epetra_CrsGraph() { return graph_; }
-
+    Epetra_CrsGraph& get_Epetra_CrsGraph() { return *graph_; }
 
     // Functions
 
@@ -140,11 +131,9 @@ namespace Core::LinAlg
 
    private:
     //! The actual Epetra_CrsGraph object.
-    std::shared_ptr<Epetra_CrsGraph> graph_;
+    std::unique_ptr<Epetra_CrsGraph> graph_;
   };
 }  // namespace Core::LinAlg
 FOUR_C_NAMESPACE_CLOSE
-
-// NOLINTEND(readability-identifier-naming)
 
 #endif
