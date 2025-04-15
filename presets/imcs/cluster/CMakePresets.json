@@ -25,6 +25,27 @@
         "CMAKE_BUILD_TYPE": "RELEASE",
         "FOUR_C_TRILINOS_ROOT": "$env{TRILINOS_ROOT}"
       }
+    },
+    {
+      "name": "imcs_charon_clion",
+      "displayName": "Configuration for remote-development using Clion at IMCS",
+      "description": "Builds the 4c release version directly on charon,
+      "inherits": [
+        ".imcs_cluster"
+      ],
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "RELEASE",
+        "FOUR_C_TRILINOS_ROOT": "/opt/trilinos/2025-03/",
+        "CMAKE_C_COMPILER": "/opt/openmpi/4.1.8/gcc/bin/mpicc",
+        "CMAKE_CXX_COMPILER": "/opt/openmpi/4.1.8/gcc/bin/mpic++",
+        "FOUR_C_QHULL_ROOT": "/opt/spack/v0.23.1/opt/spack/linux-ubuntu24.04-sapphirerapids/gcc-13.3.0/qhull-2012.1-52nebni444m47tb7wxonn23bbbvlcapb/",
+        "FOUR_C_BOOST_ROOT": "/opt/spack/v0.23.1/opt/spack/linux-ubuntu24.04-sapphirerapids/gcc-13.3.0/boost-1.86.0-ozobi6er2oftu56mkjsqsuvuqtdv6hf7"
+      },
+      "environment": {
+        "PATH": "/opt/trilinos/2025-03/bin:/opt/openmpi/4.1.8/gcc/bin:/usr/local/cuda/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+        "LD_LIBRARY_PATH": "/opt/trilinos/2025-03/lib:/opt/openmpi/4.1.8/gcc/lib:/usr/local/cuda/lib64",
+        "MPI_HOME": "/opt/openmpi/4.1.8/gcc"
+      }
     }
   ]
 }
