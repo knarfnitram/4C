@@ -390,23 +390,26 @@ namespace GEOMETRYPAIR
      */
     friend bool operator<(const LineSegment<ScalarType>& lhs, const LineSegment<ScalarType>& rhs)
     {
-      if (lhs.get_eta_b() < rhs.get_eta_a() + Constants::projection_xi_eta_tol)
+ auto tol = Constants::projection_xi_eta_tol;
+
+      // Disjoint: lhs before rhs
+      if (lhs.get_eta_b() < rhs.get_eta_a() + tol)
         return true;
-      else if (lhs.get_eta_a() > rhs.get_eta_b() - Constants::projection_xi_eta_tol)
-      {
-        // The segments do not overlap.
-      }
-      else if (abs(lhs.get_eta_a() - rhs.get_eta_a()) < Constants::projection_xi_eta_tol &&
-               abs(lhs.get_eta_b() - rhs.get_eta_b()) < Constants::projection_xi_eta_tol)
-      {
-        // The segments are equal.
-      }
-      else
-        FOUR_C_THROW("The two segments are overlapping. This is fatal!");
 
-      return false;
-    };
+      // Disjoint: lhs after rhs
+      if (lhs.get_eta_a() > rhs.get_eta_b() - tol)
+        return false;
 
+      // Equal segments (within tolerance)
+      if (std::abs(lhs.get_eta_a() - rhs.get_eta_a()) < tol &&
+          std::abs(lhs.get_eta_b() - rhs.get_eta_b()) < tol)
+        return false;
+
+      // Overlapping segments: define fallback ordering to satisfy std::set
+      return lhs.get_eta_a() < rhs.get_eta_a() ||
+             (std::abs(lhs.get_eta_a() - rhs.get_eta_a()) < tol &&
+              lhs.get_eta_b() < rhs.get_eta_b());
+    }
     /**
      * \brief Overloaded $>$ operator.
      * @param lhs
