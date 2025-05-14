@@ -16,6 +16,8 @@
 #include "4C_utils_exceptions.hpp"
 #include "4C_utils_fad.hpp"
 
+#include <boost/mpl/print.hpp>
+
 #include <vector>
 
 FOUR_C_NAMESPACE_OPEN
@@ -402,8 +404,20 @@ namespace GeometryPair
         // The segments are equal.
       }
       else
-        FOUR_C_THROW("The two segments are overlapping. This is fatal!");
+      {
 
+
+        std::cout<<"xi starting points: "<< lhs.start_point_.get_xi() << rhs.start_point_.get_xi()<<std::endl;
+        std::cout<<"xi end points: "<< lhs.end_point_.get_xi() << rhs.end_point_.get_xi()<<std::endl;
+
+        std::cout<<"eta starting points: "<< lhs.start_point_.get_eta() << rhs.start_point_.get_eta()<<std::endl;
+        std::cout<<"eat end points: "<< lhs.end_point_.get_eta() << rhs.end_point_.get_eta()<<std::endl;
+
+        //std::cout<<"projection_result starting points: "<< lhs.start_point_.get_projection_result() << rhs.start_point_.get_projection_result()<<std::endl;
+        //std::cout<<"projection_result end points: "<< lhs.end_point_.get_projection_result() << rhs.end_point_.get_projection_result()<<std::endl;
+
+        FOUR_C_THROW("The two segments are overlapping. This is fatal!");
+      }
       return false;
     };
 

@@ -350,6 +350,14 @@ void GeometryPair::LineTo3DSegmentation<PairType>::evaluate(const PairType* pair
     const ElementData<other, scalar_type>& element_data_other,
     std::vector<LineSegment<scalar_type>>& segments)
 {
+  // Add detailed output that allows for a reconstruction of the failed projection
+  std::stringstream error_message;
+
+  // Get the geometry information of the line and other geometry
+  print_pair_information(error_message, pair, element_data_line, element_data_other);
+
+  std::cout <<"starting with:\n" <<error_message.str() << std::endl;
+
   // Only zero segments are expected.
   if (segments.size() > 0)
     FOUR_C_THROW(
@@ -358,7 +366,7 @@ void GeometryPair::LineTo3DSegmentation<PairType>::evaluate(const PairType* pair
 
   // Number of search points.
   unsigned int n_search_points = pair->get_evaluation_data()->get_number_of_search_points();
-
+  std::cout <<"369" << std::endl;
   // Set up vector with projection points for the search points.
   std::vector<ProjectionPoint1DTo3D<scalar_type>> search_points;
   search_points.reserve(n_search_points);
@@ -376,7 +384,7 @@ void GeometryPair::LineTo3DSegmentation<PairType>::evaluate(const PairType* pair
   unsigned int n_projections;
   LineTo3DBase<PairType>::project_points_on_line_to_other(
       pair, element_data_line, element_data_other, search_points, dummy, n_projections);
-
+  std::cout <<"387" << std::endl;
   // If no point could be projected return, as we assume that we wont find a surface projection.
   // This usually happens for higher order elements, more search points can be a solution to
   // that problem.
@@ -397,7 +405,7 @@ void GeometryPair::LineTo3DSegmentation<PairType>::evaluate(const PairType* pair
 
     // Vector for intersection point search.
     std::vector<ProjectionPoint1DTo3D<scalar_type>> search_intersection_points;
-
+    std::cout <<"408" << std::endl;
     // Starting from each search point, try to project to all surfaces of the other geometry.
     for (auto const& point : search_points)
     {
@@ -413,7 +421,7 @@ void GeometryPair::LineTo3DSegmentation<PairType>::evaluate(const PairType* pair
           intersection_points.insert(found_point);
       }
     }
-
+    std::cout <<"424" << std::endl;
     // In the case of zero and one intersection points, no segmentation is needed. One point only
     // occurs when the line just touches the other geometry. This is the reason why the start and/or
     // end points are added to the set of found intersection.
@@ -440,7 +448,7 @@ void GeometryPair::LineTo3DSegmentation<PairType>::evaluate(const PairType* pair
       {
         // Reference to this current point.
         const ProjectionPoint1DTo3D<scalar_type>& start_point = *set_iterator;
-
+        std::cout <<"451" << std::endl;
         // Get the next intersection point and calculate the projection. This can only be done if
         // the iterator is not on its last iteration.
         if (counter != intersection_points.size() - 1)
@@ -488,10 +496,15 @@ void GeometryPair::LineTo3DSegmentation<PairType>::evaluate(const PairType* pair
             // Check if the segment already exists for this line.
             if (segment_tracker.find(new_segment_double) == segment_tracker.end())
             {
+              std::cout << "before push-back" << std::endl; std::cout << "before push-back" << std::endl; std::cout << "before push-back" << std::endl; std::cout << "before push-back" << std::endl; std::cout << "before push-back" << std::endl; std::cout << "before push-back" << std::endl; std::cout << "before push-back" << std::endl; std::cout << "before push-back" << std::endl; std::cout << "before push-back" << std::endl; std::cout << "before push-back" << std::endl; std::cout << "before push-back" << std::endl; std::cout << "before push-back" << std::endl; std::cout << "before push-back" << std::endl; std::cout << "before push-back" << std::endl; std::cout << "before push-back" << std::endl; std::cout << "before push-back" << std::endl; std::cout << "before push-back" << std::endl; std::cout << "before push-back" << std::endl; std::cout << "before push-back" << std::endl; std::cout << "before push-back" << std::endl; std::cout << "before push-back" << std::endl; std::cout << "before push-back" << std::endl; std::cout << "before push-back" << std::endl; std::cout << "before push-back" << std::endl; std::cout << "before push-back" << std::endl; std::cout << "before push-back" << std::endl; std::cout << "before push-back" << std::endl; std::cout << "before push-back" << std::endl; std::cout << "before push-back" << std::endl; std::cout << "before push-back" << std::endl; std::cout << "before push-back" << std::endl; std::cout << "before push-back" << std::endl; std::cout << "before push-back" << std::endl; std::cout << "before push-back" << std::endl; std::cout << "before push-back" << std::endl; std::cout << "before push-back" << std::endl; std::cout << "before push-back" << std::endl; std::cout << "before push-back" << std::endl;
               // Add the new segment to this pair and to the evaluation tracker.
               segments.push_back(LineSegment<scalar_type>(segment_start, start_point));
+              std::cout << "after push-back" << std::endl;std::cout << "after push-back" << std::endl;std::cout << "after push-back" << std::endl;
+              std::cout << "new_segment_double: "<< new_segment_double.get_segment_length() << std::endl;
+              std::cout << "new_segment_double: "<< new_segment_double.get_segment_length() << std::endl;
+              std::cout << "new_segment_double: "<< new_segment_double.get_segment_length() << std::endl;
               segment_tracker.insert(new_segment_double);
-
+          std::cout << "segment_tracker insert done" << std::endl;std::cout << "segment_tracker insert done" << std::endl;std::cout << "segment_tracker insert done" << std::endl;std::cout << "segment_tracker insert done" << std::endl;std::cout << "segment_tracker insert done" << std::endl;std::cout << "segment_tracker insert done" << std::endl;
               // Project the Gauss points on the segment.
               LineTo3DBase<PairType>::project_gauss_points_on_segment_to_other(
                   pair, element_data_line, element_data_other, segments.back());
