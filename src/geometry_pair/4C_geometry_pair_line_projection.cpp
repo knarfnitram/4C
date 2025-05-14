@@ -351,12 +351,13 @@ void GeometryPair::LineTo3DSegmentation<PairType>::evaluate(const PairType* pair
     std::vector<LineSegment<scalar_type>>& segments)
 {
   // Add detailed output that allows for a reconstruction of the failed projection
-  std::stringstream error_message;
+  //std::stringstream error_message;
 
   // Get the geometry information of the line and other geometry
-  print_pair_information(error_message, pair, element_data_line, element_data_other);
+  //print_pair_information(error_message, pair, element_data_line, element_data_other);
 
-  std::cout <<"starting with:\n" <<error_message.str() << std::endl;
+  //std::cout <<"starting with:\n" <<error_message.str() << std::endl;
+  double allowed_segement_size=1e-2;
 
   // Only zero segments are expected.
   if (segments.size() > 0)
@@ -486,9 +487,10 @@ void GeometryPair::LineTo3DSegmentation<PairType>::evaluate(const PairType* pair
             LineSegment<double> new_segment_double(
                 Core::FADUtils::cast_to_double(segment_start.get_eta()),
                 Core::FADUtils::cast_to_double(start_point.get_eta()));
-            std::cout <<std::abs(segment_start.get_eta()-start_point.get_eta()) << std::endl;
-            // wie klein ist das segment,dass probleme macht
-            if (std::abs(segment_start.get_eta()-start_point.get_eta())>1e-2){
+
+            //std::cout <<"diff"<<std::abs(segment_start.get_eta()-start_point.get_eta()) << std::endl;
+            // wie klein ist das segment, dass probleme macht
+            if (std::abs(segment_start.get_eta()-start_point.get_eta())>allowed_segement_size){
               // Check if the segment already exists for this line.
               if (segment_tracker.find(new_segment_double) == segment_tracker.end())
               {
