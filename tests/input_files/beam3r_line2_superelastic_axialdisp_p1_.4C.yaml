@@ -1,0 +1,131 @@
+TITLE:
+  - "Superelastic beam material test"
+PROBLEM TYPE:
+  PROBLEMTYPE: "Structure"
+DISCRETISATION:
+  NUMFLUIDDIS: 0
+  NUMALEDIS: 0
+  NUMTHERMDIS: 0
+IO/RUNTIME VTK OUTPUT:
+  INTERVAL_STEPS: 1
+  OUTPUT_DATA_FORMAT: ascii
+  EVERY_ITERATION: false
+IO/RUNTIME VTK OUTPUT/BEAMS:
+  OUTPUT_BEAMS: true
+  DISPLACEMENT: true
+  TRIAD_VISUALIZATIONPOINT: true
+  STRAINS_GAUSSPOINT: true
+  USE_ABSOLUTE_POSITIONS: true
+  MATERIAL_FORCES_GAUSSPOINT: true
+STRUCTURAL DYNAMIC:
+  INT_STRATEGY: "Standard"
+  DYNAMICTYPE: "Statics"
+  TIMESTEP: 0.1
+  NUMSTEP: 20
+  MAXTIME: 2
+  TOLRES: 1e-06
+  MAXITER: 15
+  LINEAR_SOLVER: 1
+SOLVER 1:
+  SOLVER: "UMFPACK"
+  NAME: "Structure_Solver"
+DESIGN POINT DIRICH CONDITIONS:
+  - E: 1
+    NUMDOF: 9
+    ONOFF: [1, 1, 1, 1, 1, 1, 0, 0, 0]
+    VAL: [0, 0, 0, 0, 0, 0, 0, 0, 0]
+    FUNCT: [0, 0, 0, 0, 0, 0, 0, 0, 0]
+  - E: 2
+    NUMDOF: 9
+    ONOFF: [1, 0, 0, 0, 0, 0, 0, 0, 0]
+    VAL: [1, 0, 0, 0, 0, 0, 0, 0, 0]
+    FUNCT: [1, 0, 0, 0, 0, 0, 0, 0, 0]
+DNODE-NODE TOPOLOGY:
+  - "NODE 1 DNODE 1"
+  - "NODE 6 DNODE 2"
+NODE COORDS:
+  - "NODE 1 COORD 0.000000000000000e+00 0 0"
+  - "NODE 2 COORD 1.000000000000000e+00 0 0"
+  - "NODE 3 COORD 2.000000000000000e+00 0 0"
+  - "NODE 4 COORD 3.000000000000000e+00 0 0"
+  - "NODE 5 COORD 4.000000000000000e+00 0 0"
+  - "NODE 6 COORD 5.000000000000000e+00 0 0"
+STRUCTURE ELEMENTS:
+  - "1 BEAM3R LINE2 1 2 MAT 1 TRIADS 0 0 0 0 0 0"
+  - "2 BEAM3R LINE2 2 3 MAT 1 TRIADS 0 0 0 0 0 0"
+  - "3 BEAM3R LINE2 3 4 MAT 1 TRIADS 0 0 0 0 0 0"
+  - "4 BEAM3R LINE2 4 5 MAT 1 TRIADS 0 0 0 0 0 0"
+  - "5 BEAM3R LINE2 5 6 MAT 1 TRIADS 0 0 0 0 0 0"
+MATERIALS:
+  - MAT: 1
+    MAT_BeamReissnerSuperelasticNitinol:
+      YOUNGAUST: 7.5e+07 # Austenite modulus [Pa]
+      YOUNGMART: 3.5e+07 # Martensite modulus [Pa]
+      EPS_L: 0.01 # Transformation strain [-]
+      SIGMA_S: 4.0e+06 # Start stress [Pa]
+      SIGMA_F: 1.5e+06 # Finish stress [Pa]
+      KAPPAL: 10.0 # Transformation curvature [1/mm]
+      MSTART: 1.0e+05 # Disable bending transformation
+      MFINISH: 0.0
+      DENS: 6500 # kg/m³
+      CROSSAREA: 1.0 # mm²
+      SHEARCORR: 1.0
+      SHEARMOD: 3.0e+07 # Pa
+      MOMINPOL: 0.2 # mm⁴
+      MOMIN2: 0.1 # mm⁴
+      MOMIN3: 0.1 # mm⁴
+  - MAT: 3
+    MAT_BeamReissnerSuperelasticNitinol:
+      YOUNGAUST: 7.5e+07 # Austenite modulus [Pa]
+      YOUNGMART: 3.5e+07 # Martensite modulus [Pa]
+      EPS_L: 0.01 # Max transformation strain (e.g., 6%)
+      SIGMA_S: 4e+06 # Start of forward transformation [Pa]
+      SIGMA_F: 1.5e+06 # Finish of reverse transformation [Pa]
+      KAPPAL: 10.0 # No bending transformation for now (or small if needed)
+      MSTART: 100000.00 # Disable bending transformation (set to very high value)
+      MFINISH: 0.0 # No reverse bending transformation
+      DENS: 6500 # Density [kg/m³]
+      CROSSAREA: 1.0 # Cross-sectional area [mm²]
+      SHEARCORR: 1.0 # Shear correction factor
+      SHEARMOD: 3.0e7
+      MOMINPOL: 0.2 # Polar moment of inertia
+      MOMIN2: 0.1 # Bending moment of inertia (Y)
+      MOMIN3: 0.1 # Bending moment of inertia (Z)
+      SHEAR_CORRECTION_FACTOR: 1.0
+  - MAT: 2
+    MAT_BeamReissnerElastHyper:
+      YOUNG: 100
+      POISSONRATIO: 0
+      DENS: 0
+      CROSSAREA: 0.007853981633974483
+      SHEARCORR: 1
+      MOMINPOL: 9.817477042468105e-06
+      MOMIN2: 4.9087385212340526e-06
+      MOMIN3: 4.9087385212340526e-06
+RESULT DESCRIPTION:
+  - STRUCTURE:
+      DIS: "structure"
+      NODE: 6
+      QUANTITY: "dispx"
+      VALUE: 10
+      TOLERANCE: 1e-08
+  - STRUCTURE:
+      DIS: "structure"
+      NODE: 6
+      QUANTITY: "dispy"
+      VALUE: 0
+      TOLERANCE: 1e-08
+  - STRUCTURE:
+      DIS: "structure"
+      NODE: 6
+      QUANTITY: "dispz"
+      VALUE: 0
+      TOLERANCE: 1e-08
+FUNCT1:
+  - SYMBOLIC_FUNCTION_OF_SPACE_TIME: "var"
+  - VARIABLE: 0
+    NAME: "var"
+    TYPE: "linearinterpolation"
+    NUMPOINTS: 5
+    TIMES: [-1000, 0, 1, 2, 100]
+    VALUES: [0, 0, 0.32, 0, 0]

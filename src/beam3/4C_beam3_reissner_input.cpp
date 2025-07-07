@@ -38,7 +38,8 @@ bool Discret::Elements::Beam3r::read_element(const std::string& eletype, const s
   const auto mat_type = material()->parameter()->type();
   FOUR_C_ASSERT_ALWAYS(mat_type == Core::Materials::m_beam_reissner_elast_hyper ||
                            mat_type == Core::Materials::m_beam_reissner_elast_plastic ||
-                           mat_type == Core::Materials::m_beam_reissner_elast_hyper_bymodes,
+                           mat_type == Core::Materials::m_beam_reissner_elast_hyper_bymodes ||
+                           mat_type == Core::Materials::m_beam_reissner_nitinol,
       "The material parameter definition '{}' is not supported by Beam3r element! "
       "Choose MAT_BeamReissnerElastHyper, MAT_BeamReissnerElastHyper_ByModes or "
       "MAT_BeamReissnerElastPlastic!",

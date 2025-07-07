@@ -33,6 +33,7 @@ namespace Core::Materials
                                            ///< hyperelastic stored energy function, specified for
                                            ///< individual deformation modes
     m_beam_reissner_elast_plastic,         ///< material for a Simo-Reissner beam: elasto-plastic
+    m_beam_reissner_nitinol,               ///< fresh nitionol material law
     m_beam_kirchhoff_elast_hyper,          ///< material parameters for a Kirchhoff-Love beam:
                                            ///< hyperelastic stored energy function
     m_beam_kirchhoff_elast_hyper_bymodes,  ///< material parameters for a Kirchhoff-Love beam:

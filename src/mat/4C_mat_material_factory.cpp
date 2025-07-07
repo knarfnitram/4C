@@ -11,6 +11,7 @@
 #include "4C_global_data.hpp"
 #include "4C_mat_aaaneohooke.hpp"
 #include "4C_mat_beam3r_plasticity.hpp"
+#include "4C_mat_beam3r_superelastic.hpp"
 #include "4C_mat_beam_elasthyper_parameter.hpp"
 #include "4C_mat_carreauyasuda.hpp"
 #include "4C_mat_cnst_1d_art.hpp"
@@ -167,7 +168,6 @@
 #include "4C_mixture_rule_map.hpp"
 #include "4C_mixture_rule_simple.hpp"
 #include "4C_utils_enum.hpp"
-
 FOUR_C_NAMESPACE_OPEN
 
 
@@ -945,6 +945,10 @@ std::unique_ptr<Core::Mat::PAR::Parameter> Mat::make_parameter(
     {
       return make_parameter_impl<Mat::PAR::BeamReissnerElastHyperMaterialParamsByMode>(
           id, type, input_data);
+    }
+    case Core::Materials::m_beam_reissner_nitinol:
+    {
+      return make_parameter_impl<Mat::PAR::BeamReissnerNitinolMaterialParams>(id, type, input_data);
     }
     case Core::Materials::m_beam_kirchhoff_elast_hyper:
     {

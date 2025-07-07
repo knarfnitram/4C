@@ -159,6 +159,7 @@ four_c_test(TEST_FILE beam3r_herm2line3_static_vdW_singlelengthsspec_smallsepapp
 four_c_test(TEST_FILE beam3r_herm2line4_static_test1.4C.yaml NP 2)
 four_c_test(TEST_FILE beam3r_herm2line5_static_test1.4C.yaml NP 2)
 four_c_test(TEST_FILE beam3r_line2_backweuler_browndyn_contact_twocrossedbeams.4C.yaml NP 3)
+four_c_test(TEST_FILE beam3r_line2_superelastic_axialdisp_p1_.4C.yaml NP 1)
 four_c_test(TEST_FILE beam3r_line2_backweuler_browndyn_crosslinking_beam3rline2.4C.yaml NP 2 RESTART_STEP 70)
 four_c_test(TEST_FILE beam3r_line2_backweuler_browndyn_initialcrosslinking_beam3rline2_largesys.4C.yaml NP 3)
 four_c_test(TEST_FILE beam3r_line2_backweuler_browndyn_largesys.4C.yaml NP 3)

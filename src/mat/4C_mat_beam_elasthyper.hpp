@@ -184,6 +184,9 @@ namespace Mat
     void compute_constitutive_parameter(
         Core::LinAlg::Matrix<3, 3, T>& C_N, Core::LinAlg::Matrix<3, 3, T>& C_M) override;
 
+    void compute_constitutive_parameter(
+        Core::LinAlg::Matrix<3, 3, T>& C_N, Core::LinAlg::Matrix<3, 3, T>& C_M, int gp) override;
+
     /** \brief get constitutive matrix relating stress force resultants and translational strain
      *         measures, expressed w.r.t. material frame
      *

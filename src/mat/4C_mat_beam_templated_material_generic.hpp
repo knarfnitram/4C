@@ -67,6 +67,8 @@ namespace Mat
      */
     virtual void compute_constitutive_parameter(
         Core::LinAlg::Matrix<3, 3, T>& C_N, Core::LinAlg::Matrix<3, 3, T>& C_M) = 0;
+    virtual void compute_constitutive_parameter(
+        Core::LinAlg::Matrix<3, 3, T>& C_N, Core::LinAlg::Matrix<3, 3, T>& C_M, int gp) = 0;
 
     /** \brief get constitutive matrix relating stress force resultants and translational strain
      *         measures, expressed w.r.t. material frame

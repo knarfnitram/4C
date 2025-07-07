@@ -3569,6 +3569,47 @@ std::unordered_map<Core::Materials::MaterialType, Core::IO::InputSpec> Global::v
                         "beam element "
                         "based on hyperelastic stored energy function"});
   }
+  {
+    known_materials[Core::Materials::m_beam_reissner_nitinol] = group(
+        "MAT_BeamReissnerSuperelasticNitinol",
+        {
+            parameter<double>("YOUNGAUST", {.description = "Young's modulus of austenite phase"}),
+            parameter<double>("YOUNGMART", {.description = "Young's modulus of martensite phase"}),
+
+            parameter<double>("EPS_L", {.description = "maximum transformation strain"}),
+
+            parameter<double>("SIGMA_S", {.description = "start stress of forward transformation"}),
+            parameter<double>(
+                "SIGMA_F", {.description = "finish stress of reverse transformation"}),
+
+            parameter<double>("KAPPAL", {.description = "maximum transformation curvature"}),
+            parameter<double>("MSTART", {.description = "start moment for forward transformation"}),
+            parameter<double>(
+                "MFINISH", {.description = "finish moment for reverse transformation"}),
+
+            parameter<double>("DENS", {.description = "mass density"}),
+            parameter<double>("CROSSAREA", {.description = "cross-section area"}),
+
+            parameter<double>("MOMIN2", {.description = "area moment of inertia about 2-axis"}),
+            parameter<double>("MOMIN3", {.description = "area moment of inertia about 3-axis"}),
+            parameter<double>("MOMINPOL", {.description = "polar moment of inertia"}),
+
+            parameter<double>("SHEARCORR", {.description = "shear correction factor"}),
+
+            parameter<double>(
+                "SHEARMOD", {.description = "shear modulus"}),  // optional if POISSONRATIO is used
+
+            parameter<double>("INTERACTIONRADIUS",
+                {.description = "radius of circular cross-section for beam interactions",
+                    .default_value = -1.0}),
+            parameter<bool>(
+                "FAD", {.description = "Enable automatic differentiation", .default_value = false}),
+            parameter<double>(
+                "POISSONRATIO", {.description = "Poisson's ratio", .default_value = -1.0}),
+        },
+        {.description = "Superelastic Nitinol material model for Reissner beam elements"});
+  }
+
 
   /*--------------------------------------------------------------------*/
   // material parameter definition for a torsion-free, isotropic

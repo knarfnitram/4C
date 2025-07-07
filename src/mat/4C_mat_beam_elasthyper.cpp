@@ -84,7 +84,12 @@ void Mat::BeamElastHyperMaterial<T>::compute_constitutive_parameter(
   Mat::BeamElastHyperMaterial<T>::get_constitutive_matrix_of_forces_material_frame(C_N);
   Mat::BeamElastHyperMaterial<T>::get_constitutive_matrix_of_moments_material_frame(C_M);
 }
-
+template <typename T>
+void Mat::BeamElastHyperMaterial<T>::compute_constitutive_parameter(
+    Core::LinAlg::Matrix<3, 3, T>& C_N, Core::LinAlg::Matrix<3, 3, T>& C_M, int gp)
+{
+  // we do here nothing since through the code it's assumed to be constant
+}
 /*-----------------------------------------------------------------------------------------------*
  *-----------------------------------------------------------------------------------------------*/
 template <typename T>
@@ -128,7 +133,8 @@ void Mat::BeamElastHyperMaterial<T>::unpack(Core::Communication::UnpackBuffer& b
           mat->type() == Core::Materials::m_beam_reissner_elast_plastic or
           mat->type() == Core::Materials::m_beam_kirchhoff_elast_hyper_bymodes or
           mat->type() == Core::Materials::m_beam_kirchhoff_torsionfree_elast_hyper or
-          mat->type() == Core::Materials::m_beam_kirchhoff_torsionfree_elast_hyper_bymodes)
+          mat->type() == Core::Materials::m_beam_kirchhoff_torsionfree_elast_hyper_bymodes or
+          mat->type() == Core::Materials::m_beam_reissner_nitinol)
         params_ = static_cast<Mat::PAR::BeamElastHyperMaterialParameterGeneric*>(mat);
       else
         FOUR_C_THROW("Type of material parameter {} does not fit to type of material law {}",

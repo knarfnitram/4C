@@ -319,6 +319,8 @@ std::string_view Core::Materials::to_string(Core::Materials::MaterialType materi
       return "MAT_BeamReissnerElastHyper";
     case m_beam_reissner_elast_plastic:
       return "MAT_BeamReissnerElastPlastic";
+    case m_beam_reissner_nitinol:
+      return "MAT_BeamReissnerNitinol";
     case m_beam_reissner_elast_hyper_bymodes:
       return "MAT_BeamReissnerElastHyper_ByModes";
     case m_beam_kirchhoff_elast_hyper:

@@ -385,6 +385,12 @@ void Mat::BeamPlasticMaterial<T>::compute_constitutive_parameter(
     }
   }
 }
+template <typename T>
+void Mat::BeamPlasticMaterial<T>::compute_constitutive_parameter(
+    Core::LinAlg::Matrix<3, 3, T>& C_N, Core::LinAlg::Matrix<3, 3, T>& C_M, int gp)
+{
+  // do nothing since the assumption is that it is pre-evaluated once.
+}
 
 /*-----------------------------------------------------------------------------------------------*
  *-----------------------------------------------------------------------------------------------*/
