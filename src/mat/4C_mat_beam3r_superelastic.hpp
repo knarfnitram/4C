@@ -152,16 +152,22 @@ namespace Mat
         Core::LinAlg::Matrix<3, 3, T>& C_N) const override;
 
     void get_stiffness_matrix_of_moments(Core::LinAlg::Matrix<3, 3, T>& stiffM,
-        const Core::LinAlg::Matrix<3, 3, T>& C_M, const int gp) override;
+        const Core::LinAlg::Matrix<3, 3, T>& C_M, const Core::LinAlg::Matrix<3, 1, T>& Cur,
+        const int gp) override;
     void compute_constitutive_parameter(
         Core::LinAlg::Matrix<3, 3, T>& C_N, Core::LinAlg::Matrix<3, 3, T>& C_M) override;
 
     void compute_constitutive_parameter(
         Core::LinAlg::Matrix<3, 3, T>& C_N, Core::LinAlg::Matrix<3, 3, T>& C_M, int gp) override;
 
+    T compute_martensite_fraction(T M, T xi_prev) const;
+    T compute_dxi_dM(T /*M*/) const;
+
    protected:
     double get_moment_start() const { return M_s_; }
     double get_moment_finish() const { return M_f_; }
+
+
 
    private:
     std::vector<T> xi_;                                     // Axial martensite fraction
@@ -169,10 +175,14 @@ namespace Mat
     std::vector<T> sigma_gp_;                               // Axial stress history
     std::vector<Core::LinAlg::Matrix<3, 1, T>> moment_gp_;  // Moment vector
 
+    std::vector<T> xi_trial_;
+    std::vector<T> xi_m_trial_;
+
     double E_A_, E_M_, eps_L_, sigma_s_, sigma_f_;
     double kappa_L_, M_s_, M_f_;
     double martensite_update_step_;
-    double shear_modulus_, cross_section_area_, shear_correction_factor;
+    double shear_modulus_, cross_section_area_, shear_correction_factor_;
+    double torsional_rigidity_;
   };
 }  // namespace Mat
 

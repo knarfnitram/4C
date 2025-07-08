@@ -532,13 +532,14 @@ void Mat::BeamPlasticMaterial<T>::get_effective_yield_stress_m(
  *-----------------------------------------------------------------------------------------------*/
 template <typename T>
 void Mat::BeamPlasticMaterial<T>::get_stiffness_matrix_of_moments(
-    Core::LinAlg::Matrix<3, 3, T>& stiffM, const Core::LinAlg::Matrix<3, 3, T>& C_M, const int gp)
+    Core::LinAlg::Matrix<3, 3, T>& stiffM, const Core::LinAlg::Matrix<3, 3, T>& C_M,
+    const Core::LinAlg::Matrix<3, 1, T>& Cur, const int gp)
 {
   /* compute spatial stresses and constitutive matrix from material ones according to Jelenic
    * 1999, page 148, paragraph between (2.22) and (2.23) and Romero 2004, (3.10)*/
 
   if (this->params().get_yield_stress_m() < 0 || normstress_m_[gp] + 10e-10 < effyieldstress_m_[gp])
-    Mat::BeamElastHyperMaterial<T>::get_stiffness_matrix_of_moments(stiffM, C_M, gp);
+    Mat::BeamElastHyperMaterial<T>::get_stiffness_matrix_of_moments(stiffM, C_M, Cur, gp);
   else
   {
     // Compute stiffness matrix for plastic regime:

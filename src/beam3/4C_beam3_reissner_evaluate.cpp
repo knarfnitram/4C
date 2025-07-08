@@ -1084,7 +1084,7 @@ void Discret::Elements::Beam3r::calc_internal_force_and_stiff(
     get_templated_beam_material<T>().evaluate_moment_contributions_to_stress(
         stressM, CM, Cur, numgp);
     get_templated_beam_material<T>().get_stiffness_matrix_of_moments(
-        stiffness_contribution, CM, numgp);
+        stiffness_contribution, CM, Cur, numgp);
 
     pushforward<T>(Lambda, stressM, stiffness_contribution, stressm, cm);
 

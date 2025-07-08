@@ -91,7 +91,8 @@ namespace Mat
      *\param[out] stiffness_matrix
      */
     virtual void get_stiffness_matrix_of_moments(Core::LinAlg::Matrix<3, 3, T>& stiffness_matrix,
-        const Core::LinAlg::Matrix<3, 3, T>& C_M, const int gp) = 0;
+        const Core::LinAlg::Matrix<3, 3, T>& C_M, const Core::LinAlg::Matrix<3, 1, T>& Cur,
+        const int gp) = 0;
 
     /** \brief get linearization of the constitutive law relating stress force resultants and
      * translational strain measures, expressed w.r.t. material frame

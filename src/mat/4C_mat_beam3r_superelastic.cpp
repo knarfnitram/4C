@@ -68,7 +68,8 @@ namespace Mat
         M_f_(params->get_moment_finish()),
         shear_modulus_(params->get_shear_modulus()),
         cross_section_area_(params->get_cross_section_area()),
-        shear_correction_factor(params->get_cross_section_area())
+        shear_correction_factor_(params->get_cross_section_area()),
+        torsional_rigidity_(params->get_torsional_rigidity())
   {
   }
 
@@ -79,17 +80,28 @@ namespace Mat
     sigma_gp_.resize(numgp_force, 0.0);
     xi_m_.resize(numgp_moment, 0.0);
     moment_gp_.resize(numgp_moment);
+    xi_m_trial_.resize(numgp_moment, 0.0);
+    xi_trial_.resize(numgp_force, 0.0);
   }
 
   template <typename T>
   void BeamNitinolMaterial<T>::reset()
   {
-    // nothing special for reset at this stage
+    for (size_t gp = 0; gp < xi_m_.size(); ++gp)
+    {
+      xi_m_trial_[gp] = xi_m_[gp];
+      xi_trial_[gp] = xi_[gp];
+    }
   }
 
   template <typename T>
   void BeamNitinolMaterial<T>::update()
   {
+    for (size_t gp = 0; gp < xi_m_.size(); ++gp)
+    {
+      xi_m_[gp] = xi_m_trial_[gp];
+      xi_[gp] = xi_trial_[gp];
+    }
   }
 
   template <typename T>
@@ -98,15 +110,12 @@ namespace Mat
       const Core::LinAlg::Matrix<3, 1, T>& Gamma, const unsigned int gp)
   {
     T eps = Gamma(0);
-    T xi = xi_[gp];
+    T xi = xi_trial_[gp];
     T E_eff = (1 - xi) * E_A_ + xi * E_M_;
     T eps_tr = xi * eps_L_;
     T sigma = E_eff * (eps - eps_tr);
-    if (std::abs(sigma) > sigma_s_ && xi < 1.0)
-      xi = std::min(1.0, xi + 0.01);
-    else if (std::abs(sigma) < sigma_f_ && xi > 0.0)
-      xi = std::max(0.0, xi - 0.01);
-    xi_[gp] = xi;
+    xi = compute_martensite_fraction(sigma, xi);
+    // xi_trial_[gp] = xi;
     E_eff = (1 - xi) * E_A_ + xi * E_M_;
     if (E_eff < 1e-8) std::cerr << "WARNING: E_eff approxx 0 at gp " << gp << std::endl;
 
@@ -120,12 +129,69 @@ namespace Mat
   }
 
   template <typename T>
+  T BeamNitinolMaterial<T>::compute_martensite_fraction(T M, T xi_prev) const
+  {
+    if (std::abs(M) > M_s_ && xi_prev < 1.0)
+      return std::min(1.0, xi_prev + martensite_update_step_);
+    else if (std::abs(M) < M_f_ && xi_prev > 0.0)
+      return std::max(0.0, xi_prev - martensite_update_step_);
+    else
+      return xi_prev;
+  }
+
+  template <typename T>
+  T BeamNitinolMaterial<T>::compute_dxi_dM(T /*M*/) const
+  {
+    // Discrete update model: derivative is conceptually zero in classical Newton sense
+    return 0.0;
+  }
+
+  template <typename T>
   void BeamNitinolMaterial<T>::get_stiffness_matrix_of_moments(
-      Core::LinAlg::Matrix<3, 3, T>& stiffM, const Core::LinAlg::Matrix<3, 3, T>& C_M, const int gp)
+      Core::LinAlg::Matrix<3, 3, T>& stiffM, const Core::LinAlg::Matrix<3, 3, T>& C_M,
+      const Core::LinAlg::Matrix<3, 1, T>& Cur, const int gp)
   {
     // Use current C_M as-is (e.g., computed per GP before)
     stiffM = C_M;
+    T kappa_mag = std::sqrt(Cur(1) * Cur(1) + Cur(2) * Cur(2));
+    if (kappa_mag < 1e-12) return;  // skip for numerical stability
+
+    T M_trial = (1.0 - xi_m_trial_[gp]) * E_A_ + xi_m_trial_[gp] * E_M_;
+    M_trial *= (kappa_mag - xi_m_trial_[gp] * kappa_L_);
+
+    // Smoothed martensite fraction and derivative
+    T xi = this->compute_martensite_fraction(M_trial, xi_m_trial_[gp]);
+    T dxi_dM = this->compute_dxi_dM(M_trial);
+
+    // Update internal state
+    xi_m_trial_[gp] = xi;
+
+    // Effective modulus and transformation curvature
+    T E_eff = (1.0 - xi) * E_A_ + xi * E_M_;
+    T dEeff_dxi = E_M_ - E_A_;
+    T kappa_tr = xi * kappa_L_;
+    T dkappatr_dxi = kappa_L_;
+
+    // Update CM entries
+    for (int i = 1; i <= 2; ++i)
+    {
+      T kappa_i = Cur(i);
+      T dxi_dkappa_i = dxi_dM * E_eff;  // chain rule approx
+      T dEeff_dkappa_i = dEeff_dxi * dxi_dkappa_i;
+      T dkappatr_dkappa_i = dkappatr_dxi * dxi_dkappa_i;
+
+      stiffM(i, i) = E_eff * (1.0 - kappa_tr / kappa_mag) +
+                     dEeff_dkappa_i * (Cur(i) - kappa_tr * Cur(i) / kappa_mag) -
+                     E_eff * dkappatr_dkappa_i * Cur(i) / kappa_mag +
+                     E_eff * kappa_tr * Cur(i) / (kappa_mag * kappa_mag * kappa_mag) * Cur(i) *
+                         dkappatr_dkappa_i;
+    }
+
+    // Torsional part remains elastic
+    stiffM(0, 0) = torsional_rigidity_;
   }
+
+
 
   template <typename T>
   void BeamNitinolMaterial<T>::evaluate_moment_contributions_to_stress(
@@ -133,19 +199,16 @@ namespace Mat
       const Core::LinAlg::Matrix<3, 1, T>& Cur, const unsigned int gp)
   {
     T kappa_mag = std::sqrt(Cur(1) * Cur(1) + Cur(2) * Cur(2));
-    T xi = xi_m_[gp];
+    T xi = xi_m_trial_[gp];
 
     T E_eff = (1.0 - xi) * E_A_ + xi * E_M_;
     T kappa_tr = xi * kappa_L_;
     T kappa_eff = kappa_mag - kappa_tr;
     T M = E_eff * kappa_eff;
 
-    if (std::abs(M) > M_s_ && xi < 1.0)
-      xi = std::min(1.0, xi + martensite_update_step_);
-    else if (std::abs(M) < M_f_ && xi > 0.0)
-      xi = std::max(0.0, xi - martensite_update_step_);
+    xi = compute_martensite_fraction(M, xi);
 
-    xi_m_[gp] = xi;
+    xi_m_trial_[gp] = xi;
     E_eff = (1.0 - xi) * E_A_ + xi * E_M_;
     kappa_tr = xi * kappa_L_;
 
@@ -175,12 +238,12 @@ namespace Mat
       Core::LinAlg::Matrix<3, 3, T>& C_N, Core::LinAlg::Matrix<3, 3, T>& C_M, int gp)
   {
     // Compute E_eff for the requested Gauss point
-    T xi_force = xi_[gp];
+    T xi_force = xi_trial_[gp];
     T E_eff_force = (1.0 - xi_force) * E_A_ + xi_force * E_M_;
 
     T A = this->cross_section_area_;
     T G = this->shear_modulus_;
-    T kappa = this->shear_correction_factor;
+    T kappa = this->shear_correction_factor_;
 
     C_N.clear();
     C_N(0, 0) = E_eff_force * A;
@@ -188,7 +251,7 @@ namespace Mat
     C_N(2, 2) = G * A * kappa;
 
     // Bending/torsion
-    T xi_m = xi_m_[gp];
+    T xi_m = xi_m_trial_[gp];
     T E_eff_m = (1.0 - xi_m) * E_A_ + xi_m * E_M_;
 
     C_M.clear();

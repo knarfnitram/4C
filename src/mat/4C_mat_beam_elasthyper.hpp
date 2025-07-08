@@ -226,7 +226,8 @@ namespace Mat
     double get_interaction_radius() const override;
 
     void get_stiffness_matrix_of_moments(Core::LinAlg::Matrix<3, 3, T>& stiffness_matrix,
-        const Core::LinAlg::Matrix<3, 3, T>& C_M, const int gp) override;
+        const Core::LinAlg::Matrix<3, 3, T>& C_M, const Core::LinAlg::Matrix<3, 1, T>& Cur,
+        const int gp) override;
 
     void get_stiffness_matrix_of_forces(Core::LinAlg::Matrix<3, 3, T>& stiffness_matrix,
         const Core::LinAlg::Matrix<3, 3, T>& C_N, const int gp) override;

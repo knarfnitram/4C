@@ -237,7 +237,8 @@ namespace Mat
     /** \brief compute stiffness matrix of moments for plastic regime
      */
     void get_stiffness_matrix_of_moments(Core::LinAlg::Matrix<3, 3, T>& stiffM,
-        const Core::LinAlg::Matrix<3, 3, T>& C_M, const int gp) override;
+        const Core::LinAlg::Matrix<3, 3, T>& C_M, const Core::LinAlg::Matrix<3, 1, T>& Cur,
+        const int gp) override;
 
     /** \brief compute stiffness matrix of forces for plastic regime
      */

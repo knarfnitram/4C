@@ -239,7 +239,7 @@ double Mat::BeamElastHyperMaterial<T>::get_interaction_radius() const
 template <typename T>
 void Mat::BeamElastHyperMaterial<T>::get_stiffness_matrix_of_moments(
     Core::LinAlg::Matrix<3, 3, T>& stiffness_matrix, const Core::LinAlg::Matrix<3, 3, T>& C_M,
-    const int gp)
+    const Core::LinAlg::Matrix<3, 1, T>& Cur, const int gp)
 {
   stiffness_matrix = C_M;
 }
