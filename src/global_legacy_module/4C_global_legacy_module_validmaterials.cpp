@@ -3594,8 +3594,8 @@ std::unordered_map<Core::Materials::MaterialType, Core::IO::InputSpec> Global::v
             parameter<double>("MOMIN3", {.description = "area moment of inertia about 3-axis"}),
             parameter<double>("MOMINPOL", {.description = "polar moment of inertia"}),
 
-            parameter<double>("SHEARCORR", {.description = "shear correction factor"}),
-
+            parameter<double>("SHEAR_CORRECTION_FACTOR",
+                {.description = "shear correction factor", .default_value = 1.0}),
             parameter<double>(
                 "SHEARMOD", {.description = "shear modulus"}),  // optional if POISSONRATIO is used
 
@@ -3606,6 +3606,10 @@ std::unordered_map<Core::Materials::MaterialType, Core::IO::InputSpec> Global::v
                 "FAD", {.description = "Enable automatic differentiation", .default_value = false}),
             parameter<double>(
                 "POISSONRATIO", {.description = "Poisson's ratio", .default_value = -1.0}),
+            parameter<double>("MARTENSITE_UPDATE_STEP",
+                {.description = "size of the martensitic volume fraction update xi at a Gauss ",
+                    .default_value = 0.001}),
+
         },
         {.description = "Superelastic Nitinol material model for Reissner beam elements"});
   }

@@ -38,8 +38,8 @@ namespace Mat
           shear_modulus_(determine_shear_modulus(matdata)),
           density_(matdata.parameters.get<double>("DENS")),
           cross_section_area_(matdata.parameters.get<double>("CROSSAREA")),
-          // shear_correction_factor_(matdata.parameters.get<double>("SHEAR_CORRECTION_FACTOR")),
-          shear_correction_factor_(1.0),
+          shear_correction_factor_(matdata.parameters.get<double>("SHEAR_CORRECTION_FACTOR")),
+          martensite_update_step_(matdata.parameters.get<double>("MARTENSITE_UPDATE_STEP")),
           area_moment_inertia_polar_(matdata.parameters.get<double>("MOMINPOL")),
           area_moment_inertia_2_(matdata.parameters.get<double>("MOMIN2")),
           area_moment_inertia_3_(matdata.parameters.get<double>("MOMIN3")),
@@ -90,7 +90,6 @@ namespace Mat
   template <typename T>
   void BeamNitinolMaterial<T>::update()
   {
-    // no hardening update directly overwrites xi_ and xi_m_
   }
 
   template <typename T>
@@ -99,22 +98,14 @@ namespace Mat
       const Core::LinAlg::Matrix<3, 1, T>& Gamma, const unsigned int gp)
   {
     T eps = Gamma(0);
-    std::cout << "gp = " << gp << std::endl;
-    std::cout << "eps = " << eps << std::endl;
     T xi = xi_[gp];
-    std::cout << "xi = " << xi << std::endl;
-
     T E_eff = (1 - xi) * E_A_ + xi * E_M_;
-    std::cout << "E_A_ = " << E_A_ << std::endl;
-    std::cout << "E_M_ = " << E_M_ << std::endl;
     T eps_tr = xi * eps_L_;
     T sigma = E_eff * (eps - eps_tr);
-    std::cout << "sigma = " << sigma << std::endl;
     if (std::abs(sigma) > sigma_s_ && xi < 1.0)
       xi = std::min(1.0, xi + 0.01);
     else if (std::abs(sigma) < sigma_f_ && xi > 0.0)
       xi = std::max(0.0, xi - 0.01);
-    std::cout << "xi = " << xi << std::endl;
     xi_[gp] = xi;
     E_eff = (1 - xi) * E_A_ + xi * E_M_;
     if (E_eff < 1e-8) std::cerr << "WARNING: E_eff approxx 0 at gp " << gp << std::endl;
@@ -126,8 +117,6 @@ namespace Mat
     stressN(0) = sigma;
     stressN(1) = 0.0;
     stressN(2) = 0.0;
-    std::cout << "stressN = " << sigma << std::endl;
-    stressN.print(std::cout);
   }
 
   template <typename T>
@@ -152,17 +141,19 @@ namespace Mat
     T M = E_eff * kappa_eff;
 
     if (std::abs(M) > M_s_ && xi < 1.0)
-      xi = std::min(1.0, xi + 0.01);
+      xi = std::min(1.0, xi + martensite_update_step_);
     else if (std::abs(M) < M_f_ && xi > 0.0)
-      xi = std::max(0.0, xi - 0.01);
+      xi = std::max(0.0, xi - martensite_update_step_);
 
     xi_m_[gp] = xi;
     E_eff = (1.0 - xi) * E_A_ + xi * E_M_;
     kappa_tr = xi * kappa_L_;
 
-    stressM(0) = Cur(0) * CM(0, 0);  // elastic torsion
-    stressM(1) = E_eff * (Cur(1) - kappa_tr * Cur(1) / (kappa_mag + 1e-12));
-    stressM(2) = E_eff * (Cur(2) - kappa_tr * Cur(2) / (kappa_mag + 1e-12));
+    // Avoid division by zero: use normalized form robustly
+    const T denom = std::max(kappa_mag, 1e-12);
+    stressM(0) = Cur(0) * CM(0, 0);  // torsion unchanged
+    stressM(1) = E_eff * (Cur(1) - kappa_tr * Cur(1) / denom);
+    stressM(2) = E_eff * (Cur(2) - kappa_tr * Cur(2) / denom);
 
     moment_gp_[gp] = stressM;
   }
@@ -204,8 +195,6 @@ namespace Mat
     C_M(0, 0) = this->params().get_torsional_rigidity();
     C_M(1, 1) = E_eff_m * this->params().get_mass_moment_of_inertia2();
     C_M(2, 2) = E_eff_m * this->params().get_mass_moment_of_inertia3();
-    std::cout << "C_M" << std::endl;
-    C_M.print(std::cout);
   }
 
 }  // namespace Mat

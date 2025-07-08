@@ -111,6 +111,8 @@ namespace Mat
       /// shear correction factor
       const double shear_correction_factor_;
 
+      const double martensite_update_step_;
+
       /// polar/axial area moment of inertia
       const double area_moment_inertia_polar_;
       /// area moment of inertia w.r.t. first principal axis of inertia (i.e. second base vector)
@@ -169,6 +171,7 @@ namespace Mat
 
     double E_A_, E_M_, eps_L_, sigma_s_, sigma_f_;
     double kappa_L_, M_s_, M_f_;
+    double martensite_update_step_;
     double shear_modulus_, cross_section_area_, shear_correction_factor;
   };
 }  // namespace Mat
