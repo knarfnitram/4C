@@ -175,9 +175,6 @@ namespace Mat
     std::vector<T> sigma_gp_;                               // Axial stress history
     std::vector<Core::LinAlg::Matrix<3, 1, T>> moment_gp_;  // Moment vector
 
-    std::vector<T> xi_trial_;
-    std::vector<T> xi_m_trial_;
-
     double E_A_, E_M_, eps_L_, sigma_s_, sigma_f_;
     double kappa_L_, M_s_, M_f_;
     double martensite_update_step_;

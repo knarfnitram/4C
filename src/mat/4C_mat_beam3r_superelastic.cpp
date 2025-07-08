@@ -80,28 +80,16 @@ namespace Mat
     sigma_gp_.resize(numgp_force, 0.0);
     xi_m_.resize(numgp_moment, 0.0);
     moment_gp_.resize(numgp_moment);
-    xi_m_trial_.resize(numgp_moment, 0.0);
-    xi_trial_.resize(numgp_force, 0.0);
   }
 
   template <typename T>
   void BeamNitinolMaterial<T>::reset()
   {
-    for (size_t gp = 0; gp < xi_m_.size(); ++gp)
-    {
-      xi_m_trial_[gp] = xi_m_[gp];
-      xi_trial_[gp] = xi_[gp];
-    }
   }
 
   template <typename T>
   void BeamNitinolMaterial<T>::update()
   {
-    for (size_t gp = 0; gp < xi_m_.size(); ++gp)
-    {
-      xi_m_[gp] = xi_m_trial_[gp];
-      xi_[gp] = xi_trial_[gp];
-    }
   }
 
   template <typename T>
@@ -110,12 +98,12 @@ namespace Mat
       const Core::LinAlg::Matrix<3, 1, T>& Gamma, const unsigned int gp)
   {
     T eps = Gamma(0);
-    T xi = xi_trial_[gp];
+    T xi = xi_[gp];
     T E_eff = (1 - xi) * E_A_ + xi * E_M_;
     T eps_tr = xi * eps_L_;
     T sigma = E_eff * (eps - eps_tr);
     xi = compute_martensite_fraction(sigma, xi);
-    // xi_trial_[gp] = xi;
+
     E_eff = (1 - xi) * E_A_ + xi * E_M_;
     if (E_eff < 1e-8) std::cerr << "WARNING: E_eff approxx 0 at gp " << gp << std::endl;
 
@@ -156,15 +144,15 @@ namespace Mat
     T kappa_mag = std::sqrt(Cur(1) * Cur(1) + Cur(2) * Cur(2));
     if (kappa_mag < 1e-12) return;  // skip for numerical stability
 
-    T M_trial = (1.0 - xi_m_trial_[gp]) * E_A_ + xi_m_trial_[gp] * E_M_;
-    M_trial *= (kappa_mag - xi_m_trial_[gp] * kappa_L_);
+    T M_trial = (1.0 - xi_m_[gp]) * E_A_ + xi_m_[gp] * E_M_;
+    M_trial *= (kappa_mag - xi_m_[gp] * kappa_L_);
 
     // Smoothed martensite fraction and derivative
-    T xi = this->compute_martensite_fraction(M_trial, xi_m_trial_[gp]);
+    T xi = this->compute_martensite_fraction(M_trial, xi_m_[gp]);
     T dxi_dM = this->compute_dxi_dM(M_trial);
 
     // Update internal state
-    xi_m_trial_[gp] = xi;
+    xi_m_[gp] = xi;
 
     // Effective modulus and transformation curvature
     T E_eff = (1.0 - xi) * E_A_ + xi * E_M_;
@@ -199,7 +187,7 @@ namespace Mat
       const Core::LinAlg::Matrix<3, 1, T>& Cur, const unsigned int gp)
   {
     T kappa_mag = std::sqrt(Cur(1) * Cur(1) + Cur(2) * Cur(2));
-    T xi = xi_m_trial_[gp];
+    T xi = xi_m_[gp];
 
     T E_eff = (1.0 - xi) * E_A_ + xi * E_M_;
     T kappa_tr = xi * kappa_L_;
@@ -208,7 +196,7 @@ namespace Mat
 
     xi = compute_martensite_fraction(M, xi);
 
-    xi_m_trial_[gp] = xi;
+    xi_m_[gp] = xi;
     E_eff = (1.0 - xi) * E_A_ + xi * E_M_;
     kappa_tr = xi * kappa_L_;
 
@@ -238,7 +226,7 @@ namespace Mat
       Core::LinAlg::Matrix<3, 3, T>& C_N, Core::LinAlg::Matrix<3, 3, T>& C_M, int gp)
   {
     // Compute E_eff for the requested Gauss point
-    T xi_force = xi_trial_[gp];
+    T xi_force = xi_[gp];
     T E_eff_force = (1.0 - xi_force) * E_A_ + xi_force * E_M_;
 
     T A = this->cross_section_area_;
@@ -251,7 +239,7 @@ namespace Mat
     C_N(2, 2) = G * A * kappa;
 
     // Bending/torsion
-    T xi_m = xi_m_trial_[gp];
+    T xi_m = xi_m_[gp];
     T E_eff_m = (1.0 - xi_m) * E_A_ + xi_m * E_M_;
 
     C_M.clear();
