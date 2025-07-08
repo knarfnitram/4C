@@ -69,7 +69,8 @@ namespace Mat
         shear_modulus_(params->get_shear_modulus()),
         cross_section_area_(params->get_cross_section_area()),
         shear_correction_factor_(params->get_cross_section_area()),
-        torsional_rigidity_(params->get_torsional_rigidity())
+        torsional_rigidity_(params->get_torsional_rigidity()),
+        params_(params)
   {
   }
 
@@ -77,19 +78,55 @@ namespace Mat
   void BeamNitinolMaterial<T>::setup(int numgp_force, int numgp_moment)
   {
     xi_.resize(numgp_force, 0.0);
+    xi_curr_.resize(numgp_force, 0.0);
     sigma_gp_.resize(numgp_force, 0.0);
     xi_m_.resize(numgp_moment, 0.0);
     moment_gp_.resize(numgp_moment);
+    xi_m_curr_.resize(numgp_moment, 0.0);
+    numgp_moment_ = numgp_moment;
+    numgp_force_ = numgp_force;
+    std::cout << "i was called = " << std::endl;
+
+    for (int gp = 0; gp < numgp_force; gp++)
+    {
+      xi_[gp] = 0.0;
+      xi_curr_[gp] = 0.0;
+      sigma_gp_[gp] = 0.0;
+    }
+    for (int gp = 0; gp < numgp_force; gp++)
+    {
+      xi_m_[gp] = 0.0;
+      xi_m_curr_[gp] = 0.0;
+      moment_gp_[gp] = 0.0;
+    }
   }
 
   template <typename T>
   void BeamNitinolMaterial<T>::reset()
   {
+    /*for (unsigned int gp = 0; gp < numgp_force_; gp++)
+    {
+      xi_curr_[gp] = xi_[gp];
+    }
+
+    for (unsigned int gp = 0; gp < numgp_moment_; gp++)
+    {
+      xi_m_curr_[gp] = xi_m_[gp];
+    }*/
   }
 
   template <typename T>
   void BeamNitinolMaterial<T>::update()
   {
+    /*for (unsigned int gp = 0; gp < numgp_force_; gp++)
+    {
+      xi_[gp] = xi_curr_[gp];
+    }
+
+    for (unsigned int gp = 0; gp < numgp_moment_; gp++)
+    {
+      xi_m_[gp] = xi_m_curr_[gp];
+    }*/
   }
 
   template <typename T>
@@ -97,41 +134,34 @@ namespace Mat
       Core::LinAlg::Matrix<3, 1, T>& stressN, const Core::LinAlg::Matrix<3, 3, T>& CN,
       const Core::LinAlg::Matrix<3, 1, T>& Gamma, const unsigned int gp)
   {
+    // Full nonlinear superelastic constitutive model
     T eps = Gamma(0);
-    T xi = xi_[gp];
+    T xi = xi_curr_[gp];  // use the updated xi
     T E_eff = (1 - xi) * E_A_ + xi * E_M_;
     T eps_tr = xi * eps_L_;
     T sigma = E_eff * (eps - eps_tr);
-    xi = compute_martensite_fraction(sigma, xi);
-
-    E_eff = (1 - xi) * E_A_ + xi * E_M_;
-    if (E_eff < 1e-8) std::cerr << "WARNING: E_eff approxx 0 at gp " << gp << std::endl;
-
-    eps_tr = xi * eps_L_;
-    sigma = E_eff * (eps - eps_tr);
 
     sigma_gp_[gp] = sigma;
+
     stressN(0) = sigma;
     stressN(1) = 0.0;
     stressN(2) = 0.0;
+    // compute material stresses by multiplying strains with constitutive matrix
+    // Axial strain from deformation gradient Gamma
+
+    // compute material stresses by multiplying strains with constitutive matrix
+    // stressN.multiply(CN, Gamma);
   }
 
   template <typename T>
-  T BeamNitinolMaterial<T>::compute_martensite_fraction(T M, T xi_prev) const
+  T BeamNitinolMaterial<T>::compute_martensite_fraction(T sigma, T xi_prev) const
   {
-    if (std::abs(M) > M_s_ && xi_prev < 1.0)
+    if (std::abs(sigma) > sigma_s_ && xi_prev < 1)
       return std::min(1.0, xi_prev + martensite_update_step_);
-    else if (std::abs(M) < M_f_ && xi_prev > 0.0)
+    else if (std::abs(sigma) < sigma_f_ && xi_prev > 0.0)
       return std::max(0.0, xi_prev - martensite_update_step_);
     else
       return xi_prev;
-  }
-
-  template <typename T>
-  T BeamNitinolMaterial<T>::compute_dxi_dM(T /*M*/) const
-  {
-    // Discrete update model: derivative is conceptually zero in classical Newton sense
-    return 0.0;
   }
 
   template <typename T>
@@ -141,44 +171,16 @@ namespace Mat
   {
     // Use current C_M as-is (e.g., computed per GP before)
     stiffM = C_M;
-    T kappa_mag = std::sqrt(Cur(1) * Cur(1) + Cur(2) * Cur(2));
-    if (kappa_mag < 1e-12) return;  // skip for numerical stability
-
-    T M_trial = (1.0 - xi_m_[gp]) * E_A_ + xi_m_[gp] * E_M_;
-    M_trial *= (kappa_mag - xi_m_[gp] * kappa_L_);
-
-    // Smoothed martensite fraction and derivative
-    T xi = this->compute_martensite_fraction(M_trial, xi_m_[gp]);
-    T dxi_dM = this->compute_dxi_dM(M_trial);
-
-    // Update internal state
-    xi_m_[gp] = xi;
-
-    // Effective modulus and transformation curvature
-    T E_eff = (1.0 - xi) * E_A_ + xi * E_M_;
-    T dEeff_dxi = E_M_ - E_A_;
-    T kappa_tr = xi * kappa_L_;
-    T dkappatr_dxi = kappa_L_;
-
-    // Update CM entries
-    for (int i = 1; i <= 2; ++i)
-    {
-      T kappa_i = Cur(i);
-      T dxi_dkappa_i = dxi_dM * E_eff;  // chain rule approx
-      T dEeff_dkappa_i = dEeff_dxi * dxi_dkappa_i;
-      T dkappatr_dkappa_i = dkappatr_dxi * dxi_dkappa_i;
-
-      stiffM(i, i) = E_eff * (1.0 - kappa_tr / kappa_mag) +
-                     dEeff_dkappa_i * (Cur(i) - kappa_tr * Cur(i) / kappa_mag) -
-                     E_eff * dkappatr_dkappa_i * Cur(i) / kappa_mag +
-                     E_eff * kappa_tr * Cur(i) / (kappa_mag * kappa_mag * kappa_mag) * Cur(i) *
-                         dkappatr_dkappa_i;
-    }
-
-    // Torsional part remains elastic
-    stiffM(0, 0) = torsional_rigidity_;
   }
 
+
+  template <typename T>
+  void BeamNitinolMaterial<T>::get_stiffness_matrix_of_forces(
+      Core::LinAlg::Matrix<3, 3, T>& stiffness_matrix, const Core::LinAlg::Matrix<3, 3, T>& C_N,
+      const int gp)
+  {
+    stiffness_matrix = C_N;
+  }
 
 
   template <typename T>
@@ -186,6 +188,7 @@ namespace Mat
       Core::LinAlg::Matrix<3, 1, T>& stressM, const Core::LinAlg::Matrix<3, 3, T>& CM,
       const Core::LinAlg::Matrix<3, 1, T>& Cur, const unsigned int gp)
   {
+    /*
     T kappa_mag = std::sqrt(Cur(1) * Cur(1) + Cur(2) * Cur(2));
     T xi = xi_m_[gp];
 
@@ -206,7 +209,9 @@ namespace Mat
     stressM(1) = E_eff * (Cur(1) - kappa_tr * Cur(1) / denom);
     stressM(2) = E_eff * (Cur(2) - kappa_tr * Cur(2) / denom);
 
-    moment_gp_[gp] = stressM;
+    moment_gp_[gp] = stressM;*/
+    // compute material stresses by multiplying curvature with constitutive matrix
+    stressM.multiply(CM, Cur);
   }
 
   template <typename T>
@@ -219,33 +224,81 @@ namespace Mat
   void Mat::BeamNitinolMaterial<T>::compute_constitutive_parameter(
       Core::LinAlg::Matrix<3, 3, T>& C_N, Core::LinAlg::Matrix<3, 3, T>& C_M)
   {
-    // FOUR_C_THROW("Please do not call compute_constitutive_parameter without gp");
   }
+
+  template <typename T>
+  T BeamNitinolMaterial<T>::compute_dxi_dsigma(T sigma) const
+  {
+    const T center = 0.5 * (sigma_s_ + sigma_f_);
+    const T half_range = std::max(0.5 * (sigma_s_ - sigma_f_), 1e-6);  // Was 1e-12: too small
+    const T scale = 100.0;                                             // Make smoother transition
+
+    // Clamp argument to avoid overflow in tanh
+    T arg = std::clamp(scale * (std::abs(sigma) - center) / half_range, -20.0, 20.0);
+    T tanh_val = std::tanh(arg);
+
+    T dH_dsigma = scale / half_range * (1.0 - tanh_val * tanh_val);
+
+    // Avoid returning NaN or inf
+    if (!std::isfinite(dH_dsigma)) dH_dsigma = 0.0;
+
+    return martensite_update_step_ * dH_dsigma * ((sigma > 0) ? 1.0 : -1.0);
+  }
+
   template <typename T>
   void Mat::BeamNitinolMaterial<T>::compute_constitutive_parameter(
-      Core::LinAlg::Matrix<3, 3, T>& C_N, Core::LinAlg::Matrix<3, 3, T>& C_M, int gp)
+      Core::LinAlg::Matrix<3, 3, T>& C_N, Core::LinAlg::Matrix<3, 3, T>& C_M,
+      const Core::LinAlg::Matrix<3, 1, T>& Gamma, const int gp)
   {
-    // Compute E_eff for the requested Gauss point
-    T xi_force = xi_[gp];
-    T E_eff_force = (1.0 - xi_force) * E_A_ + xi_force * E_M_;
+    // strain
+    auto eps = Gamma(0);
 
+    // previous xi
+    T xi = xi_[gp];
+
+    // compute effective modulus and transformation strain
+    T E_eff = (1 - xi) * E_A_ + xi * E_M_;
+    T eps_tr = xi * eps_L_;
+    T sigma = E_eff * (eps - eps_tr);
+
+    // store for output/debug
+    sigma_gp_[gp] = sigma;
+
+    // update xi based on current sigma
+    T xi_new = compute_martensite_fraction(sigma, xi);
+    xi_curr_[gp] = xi_new;
+    xi_[gp] = xi_new;
+    // update effective modulus with new xi
+    E_eff = (1 - xi_new) * E_A_ + xi_new * E_M_;
+    // eps_tr = xi_new * eps_L_;
+
+    // === Consistent tangent computation ===
+    // T dxi_dsigma = compute_dxi_dsigma(sigma);  // Enable this!
+    // T dEeff_dxi = E_M_ - E_A_;
+    // T dσ_deps = dEeff_dxi * dxi_dsigma * (eps - eps_tr) + E_eff * (1.0 - eps_L_ * dxi_dsigma);
+
+    // === Final constitutive matrix ===
     T A = this->cross_section_area_;
     T G = this->shear_modulus_;
     T kappa = this->shear_correction_factor_;
 
     C_N.clear();
-    C_N(0, 0) = E_eff_force * A;
-    C_N(1, 1) = G * A * kappa;
-    C_N(2, 2) = G * A * kappa;
+    C_N(0, 0) = E_eff * A;  // ✅ THIS is now consistent
+    C_N(1, 1) = G * A;
+    C_N(2, 2) = G * A;
 
-    // Bending/torsion
-    T xi_m = xi_m_[gp];
-    T E_eff_m = (1.0 - xi_m) * E_A_ + xi_m * E_M_;
+    // Debug output
+    // std::cout << "[gp " << gp << "] eps = " << eps << ", sigma = " << sigma << ", xi = " <<
+    // xi_new
+    //          << ", dσ/deps = " << dσ_deps << ", E_eff = " << E_eff << std::endl;
 
+    // defining material constitutive matrix CM between curvature and moment
+    // according to Jelenic 1999, section 2.4
     C_M.clear();
+
     C_M(0, 0) = this->params().get_torsional_rigidity();
-    C_M(1, 1) = E_eff_m * this->params().get_mass_moment_of_inertia2();
-    C_M(2, 2) = E_eff_m * this->params().get_mass_moment_of_inertia3();
+    C_M(1, 1) = this->params().get_bending_rigidity2();
+    C_M(2, 2) = this->params().get_bending_rigidity3();
   }
 
 }  // namespace Mat

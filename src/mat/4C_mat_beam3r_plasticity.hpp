@@ -260,8 +260,9 @@ namespace Mat
 
     /** \brief get hardening constitutive parameters depending on the type of plasticity
      */
-    void compute_constitutive_parameter(
-        Core::LinAlg::Matrix<3, 3, T>& C_N, Core::LinAlg::Matrix<3, 3, T>& C_M, int gp) override;
+    void compute_constitutive_parameter(Core::LinAlg::Matrix<3, 3, T>& C_N,
+        Core::LinAlg::Matrix<3, 3, T>& C_M, const Core::LinAlg::Matrix<3, 1, T>& Gamma,
+        int gp) override;
 
    protected:
     /** \brief get the constitutive matrix of forces during kinematic hardening

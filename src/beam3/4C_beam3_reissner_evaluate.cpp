@@ -955,7 +955,7 @@ void Discret::Elements::Beam3r::calc_internal_force_and_stiff(
     compute_gamma<T>(r_s, Lambda, gammaref_gp_[numgp], Gamma);
 
     // dependent on material law the forces are updated here
-    get_templated_beam_material<T>().compute_constitutive_parameter(CN, CM, numgp);
+    get_templated_beam_material<T>().compute_constitutive_parameter(CN, CM, Gamma, numgp);
 
     get_templated_beam_material<T>().evaluate_force_contributions_to_stress(
         stressN, CN, Gamma, numgp);

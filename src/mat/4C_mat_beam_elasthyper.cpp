@@ -86,7 +86,8 @@ void Mat::BeamElastHyperMaterial<T>::compute_constitutive_parameter(
 }
 template <typename T>
 void Mat::BeamElastHyperMaterial<T>::compute_constitutive_parameter(
-    Core::LinAlg::Matrix<3, 3, T>& C_N, Core::LinAlg::Matrix<3, 3, T>& C_M, int gp)
+    Core::LinAlg::Matrix<3, 3, T>& C_N, Core::LinAlg::Matrix<3, 3, T>& C_M,
+    const Core::LinAlg::Matrix<3, 1, T>& Gamma, const int gp)
 {
   // we do here nothing since through the code it's assumed to be constant
 }

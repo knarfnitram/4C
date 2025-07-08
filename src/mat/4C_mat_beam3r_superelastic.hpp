@@ -84,7 +84,14 @@ namespace Mat
       {
         return density_ * area_moment_inertia_3_;
       }
+      double mass_moment_of_inertia() const
+      {
+        return (area_moment_inertia_2_ + area_moment_inertia_3_);
+      }
 
+      double moment_of_inertia2() const { return area_moment_inertia_2_; }
+
+      double moment_of_inertia3() const { return area_moment_inertia_3_; }
 
       double get_interaction_radius() const override
       {
@@ -136,7 +143,8 @@ namespace Mat
     void setup(int numgp_force, int numgp_moment) override;
     void reset() override;
     void update() override;
-
+    void get_stiffness_matrix_of_forces(Core::LinAlg::Matrix<3, 3, T>& stiffness_matrix,
+        const Core::LinAlg::Matrix<3, 3, T>& C_N, const int gp);
     void evaluate_force_contributions_to_stress(Core::LinAlg::Matrix<3, 1, T>& stressN,
         const Core::LinAlg::Matrix<3, 3, T>& CN, const Core::LinAlg::Matrix<3, 1, T>& Gamma,
         const unsigned int gp) override;
@@ -154,14 +162,16 @@ namespace Mat
     void get_stiffness_matrix_of_moments(Core::LinAlg::Matrix<3, 3, T>& stiffM,
         const Core::LinAlg::Matrix<3, 3, T>& C_M, const Core::LinAlg::Matrix<3, 1, T>& Cur,
         const int gp) override;
+
     void compute_constitutive_parameter(
         Core::LinAlg::Matrix<3, 3, T>& C_N, Core::LinAlg::Matrix<3, 3, T>& C_M) override;
 
-    void compute_constitutive_parameter(
-        Core::LinAlg::Matrix<3, 3, T>& C_N, Core::LinAlg::Matrix<3, 3, T>& C_M, int gp) override;
+    void compute_constitutive_parameter(Core::LinAlg::Matrix<3, 3, T>& C_N,
+        Core::LinAlg::Matrix<3, 3, T>& C_M, const Core::LinAlg::Matrix<3, 1, T>& Gamma,
+        int gp) override;
 
     T compute_martensite_fraction(T M, T xi_prev) const;
-    T compute_dxi_dM(T /*M*/) const;
+    T compute_dxi_dsigma(T sigma) const;
 
    protected:
     double get_moment_start() const { return M_s_; }
@@ -171,7 +181,9 @@ namespace Mat
 
    private:
     std::vector<T> xi_;                                     // Axial martensite fraction
+    std::vector<T> xi_curr_;                                // current Axial martensite fraction
     std::vector<T> xi_m_;                                   // Bending martensite fraction
+    std::vector<T> xi_m_curr_;                              // current Bending martensite prev
     std::vector<T> sigma_gp_;                               // Axial stress history
     std::vector<Core::LinAlg::Matrix<3, 1, T>> moment_gp_;  // Moment vector
 
@@ -180,6 +192,19 @@ namespace Mat
     double martensite_update_step_;
     double shear_modulus_, cross_section_area_, shear_correction_factor_;
     double torsional_rigidity_;
+
+    /// Number of integration points for forces
+    unsigned int numgp_force_;
+
+    /// Number of integration points for moments
+    unsigned int numgp_moment_;
+
+    void set_parameter(Mat::PAR::BeamReissnerNitinolMaterialParams* parameter)
+    {
+      params_ = parameter;
+    }
+    /// my material parameters
+    Mat::PAR::BeamReissnerNitinolMaterialParams* params_;
   };
 }  // namespace Mat
 
