@@ -118,7 +118,7 @@ namespace Mat
   template <typename T>
   void BeamNitinolMaterial<T>::update()
   {
-    /*for (unsigned int gp = 0; gp < numgp_force_; gp++)
+    for (unsigned int gp = 0; gp < numgp_force_; gp++)
     {
       xi_[gp] = xi_curr_[gp];
     }
@@ -126,7 +126,7 @@ namespace Mat
     for (unsigned int gp = 0; gp < numgp_moment_; gp++)
     {
       xi_m_[gp] = xi_m_curr_[gp];
-    }*/
+    }
   }
 
   template <typename T>
@@ -250,55 +250,57 @@ namespace Mat
       Core::LinAlg::Matrix<3, 3, T>& C_N, Core::LinAlg::Matrix<3, 3, T>& C_M,
       const Core::LinAlg::Matrix<3, 1, T>& Gamma, const int gp)
   {
-    // strain
-    auto eps = Gamma(0);
+    T eps = Gamma(0);
+    T xi_old = xi_[gp];
 
-    // previous xi
-    T xi = xi_[gp];
+    // Step 1: Evaluate stress and update xi
+    T E_eff_old = (1 - xi_old) * E_A_ + xi_old * E_M_;
+    T eps_tr_old = xi_old * eps_L_;
+    T sigma = E_eff_old * (eps - eps_tr_old);
 
-    // compute effective modulus and transformation strain
-    T E_eff = (1 - xi) * E_A_ + xi * E_M_;
-    T eps_tr = xi * eps_L_;
-    T sigma = E_eff * (eps - eps_tr);
-
-    // store for output/debug
-    sigma_gp_[gp] = sigma;
-
-    // update xi based on current sigma
-    T xi_new = compute_martensite_fraction(sigma, xi);
+    T xi_new = compute_martensite_fraction(sigma, xi_old);
     xi_curr_[gp] = xi_new;
-    xi_[gp] = xi_new;
-    // update effective modulus with new xi
-    E_eff = (1 - xi_new) * E_A_ + xi_new * E_M_;
-    // eps_tr = xi_new * eps_L_;
 
-    // === Consistent tangent computation ===
-    // T dxi_dsigma = compute_dxi_dsigma(sigma);  // Enable this!
-    // T dEeff_dxi = E_M_ - E_A_;
-    // T dσ_deps = dEeff_dxi * dxi_dsigma * (eps - eps_tr) + E_eff * (1.0 - eps_L_ * dxi_dsigma);
+    T E_eff = (1 - xi_new) * E_A_ + xi_new * E_M_;
 
-    // === Final constitutive matrix ===
+    // Step 2: Compute consistent tangent
+    T dxi_dsigma = compute_dxi_dsigma(sigma);
+    T dEeff_dxi = E_M_ - E_A_;
+
+    // dσ/dε = ...
+    T dσ_deps = E_eff_old * (1 - eps_L_ * dxi_dsigma) + dEeff_dxi * dxi_dsigma * (eps - eps_tr_old);
+
+    // Step 3: Assemble consistent tangent matrix
     T A = this->cross_section_area_;
     T G = this->shear_modulus_;
     T kappa = this->shear_correction_factor_;
 
     C_N.clear();
-    C_N(0, 0) = E_eff * A;  // ✅ THIS is now consistent
-    C_N(1, 1) = G * A;
-    C_N(2, 2) = G * A;
+    C_N(0, 0) = dσ_deps * A;
+    C_N(1, 1) = G * A * kappa;
+    C_N(2, 2) = G * A * kappa;
 
-    // Debug output
-    // std::cout << "[gp " << gp << "] eps = " << eps << ", sigma = " << sigma << ", xi = " <<
-    // xi_new
-    //          << ", dσ/deps = " << dσ_deps << ", E_eff = " << E_eff << std::endl;
-
-    // defining material constitutive matrix CM between curvature and moment
-    // according to Jelenic 1999, section 2.4
+    // Step 4: Bending (linear for now)
+    T E_eff_m = (1.0 - xi_m_[gp]) * E_A_ + xi_m_[gp] * E_M_;
     C_M.clear();
-
     C_M(0, 0) = this->params().get_torsional_rigidity();
-    C_M(1, 1) = this->params().get_bending_rigidity2();
-    C_M(2, 2) = this->params().get_bending_rigidity3();
+    C_M(1, 1) = E_eff_m * this->params().get_mass_moment_of_inertia2();
+    C_M(2, 2) = E_eff_m * this->params().get_mass_moment_of_inertia3();
+
+
+
+    std::cout << std::scientific;
+
+    std::cout << "[gp " << gp << "] START" << std::endl;
+    C_M.print(std::cout);
+    std::cout << "  eps      = " << eps << std::endl;
+    std::cout << "  xi_old   = " << xi_old << std::endl;
+    std::cout << "  eps_L    = " << eps_L_ << std::endl;
+    std::cout << "  E_A_     = " << E_A_ << ", E_M_ = " << E_M_ << std::endl;
+    std::cout << "  sigma    = " << sigma << std::endl;
+    std::cout << "  xi_new   = " << xi_new << std::endl;
+    std::cout << "  dxi/dσ   = " << dxi_dsigma << std::endl;
+    std::cout << "  dσ/dε    = " << dσ_deps << std::endl;
   }
 
 }  // namespace Mat
