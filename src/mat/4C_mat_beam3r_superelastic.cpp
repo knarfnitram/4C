@@ -140,7 +140,13 @@ namespace Mat
     T E_eff = (1 - xi) * E_A_ + xi * E_M_;
     T eps_tr = xi * eps_L_;
     T sigma = E_eff * (eps - eps_tr);
-
+    if (std::abs(sigma) > sigma_s_ && xi < 1.0)
+      xi = std::min(1.0, xi + martensite_update_step_);
+    else if (std::abs(sigma) < sigma_f_ && xi > 0.0)
+      xi = std::max(0.0, xi - martensite_update_step_);
+    E_eff = (1 - xi) * E_A_ + xi * E_M_;
+    eps_tr = xi * eps_L_;
+    sigma = E_eff * (eps - eps_tr);
     sigma_gp_[gp] = sigma;
 
     stressN(0) = sigma;
@@ -156,12 +162,17 @@ namespace Mat
   template <typename T>
   T BeamNitinolMaterial<T>::compute_martensite_fraction(T sigma, T xi_prev) const
   {
-    if (std::abs(sigma) > sigma_s_ && xi_prev < 1)
-      return std::min(1.0, xi_prev + martensite_update_step_);
-    else if (std::abs(sigma) < sigma_f_ && xi_prev > 0.0)
-      return std::max(0.0, xi_prev - martensite_update_step_);
-    else
-      return xi_prev;
+    /*const T center = 0.5 * (sigma_s_ + sigma_f_);
+    const T half_range = std::max(0.5 * (sigma_s_ - sigma_f_), 1e-6);
+    const T scale = 5.0;  // Controls smoothness
+
+    T arg = std::clamp((sigma - center) / half_range, -20.0, 20.0);
+    T xi = 0.5 * (1.0 + std::tanh(scale * arg));*/
+    T abs_sigma = std::abs(sigma);
+    if (abs_sigma < sigma_f_) return 0.0;
+    if (abs_sigma > sigma_s_) return 1.0;
+    T xi = (abs_sigma - sigma_f_) / (sigma_s_ - sigma_f_);
+    return std::clamp(xi, 0.0, 1.0);
   }
 
   template <typename T>
@@ -230,19 +241,13 @@ namespace Mat
   T BeamNitinolMaterial<T>::compute_dxi_dsigma(T sigma) const
   {
     const T center = 0.5 * (sigma_s_ + sigma_f_);
-    const T half_range = std::max(0.5 * (sigma_s_ - sigma_f_), 1e-6);  // Was 1e-12: too small
-    const T scale = 100.0;                                             // Make smoother transition
+    const T half_range = std::max(0.5 * (sigma_s_ - sigma_f_), 1e-6);
+    const T scale = 5.0;
 
-    // Clamp argument to avoid overflow in tanh
-    T arg = std::clamp(scale * (std::abs(sigma) - center) / half_range, -20.0, 20.0);
-    T tanh_val = std::tanh(arg);
+    T arg = std::clamp((sigma - center) / half_range, -20.0, 20.0);
+    T dH_dσ = scale / half_range * (1.0 - std::tanh(scale * arg) * std::tanh(scale * arg));
 
-    T dH_dsigma = scale / half_range * (1.0 - tanh_val * tanh_val);
-
-    // Avoid returning NaN or inf
-    if (!std::isfinite(dH_dsigma)) dH_dsigma = 0.0;
-
-    return martensite_update_step_ * dH_dsigma * ((sigma > 0) ? 1.0 : -1.0);
+    return dH_dσ;
   }
 
   template <typename T>
@@ -251,41 +256,47 @@ namespace Mat
       const Core::LinAlg::Matrix<3, 1, T>& Gamma, const int gp)
   {
     T eps = Gamma(0);
-    T xi_old = xi_[gp];
 
-    // Step 1: Evaluate stress and update xi
-    T E_eff_old = (1 - xi_old) * E_A_ + xi_old * E_M_;
-    T eps_tr_old = xi_old * eps_L_;
-    T sigma = E_eff_old * (eps - eps_tr_old);
+    // Initial trial stress assuming xi is still 0
+    T sigma_trial = E_A_ * eps;
 
-    T xi_new = compute_martensite_fraction(sigma, xi_old);
-    xi_curr_[gp] = xi_new;
+    // Compute xi based on trial stress
+    T xi = compute_martensite_fraction(sigma_trial, 0.0);
 
-    T E_eff = (1 - xi_new) * E_A_ + xi_new * E_M_;
+    // Update effective modulus and transformation strain
+    T E_eff = (1 - xi) * E_A_ + xi * E_M_;
+    T eps_tr = xi * eps_L_;
+    T sigma = E_eff * (eps - eps_tr);
 
-    // Step 2: Compute consistent tangent
-    T dxi_dsigma = compute_dxi_dsigma(sigma);
+    // Compute dxi/dσ and consistent tangent dσ/dε
+    T dxi_dsigma = 0.0;
+    if (sigma > sigma_f_ && sigma < sigma_s_) dxi_dsigma = 1.0 / (sigma_s_ - sigma_f_);
+
     T dEeff_dxi = E_M_ - E_A_;
+    T denom = 1.0 + dxi_dsigma * (E_eff * eps_L_ - dEeff_dxi * (eps - eps_tr));
+    T dσ_dε = E_eff / denom;
 
-    // dσ/dε = ...
-    T dσ_deps = E_eff_old * (1 - eps_L_ * dxi_dsigma) + dEeff_dxi * dxi_dsigma * (eps - eps_tr_old);
 
-    // Step 3: Assemble consistent tangent matrix
+    // Final stiffness matrix assembly
     T A = this->cross_section_area_;
     T G = this->shear_modulus_;
     T kappa = this->shear_correction_factor_;
 
     C_N.clear();
-    C_N(0, 0) = dσ_deps * A;
+    C_N(0, 0) = dσ_dε * A;
     C_N(1, 1) = G * A * kappa;
     C_N(2, 2) = G * A * kappa;
 
-    // Step 4: Bending (linear for now)
-    T E_eff_m = (1.0 - xi_m_[gp]) * E_A_ + xi_m_[gp] * E_M_;
+    // Moment matrix: keep it linear for now
+    T E_eff_m = (1.0 - xi) * E_A_ + xi * E_M_;
     C_M.clear();
     C_M(0, 0) = this->params().get_torsional_rigidity();
     C_M(1, 1) = E_eff_m * this->params().get_mass_moment_of_inertia2();
     C_M(2, 2) = E_eff_m * this->params().get_mass_moment_of_inertia3();
+
+    // Store for stress evaluation
+    xi_curr_[gp] = xi;
+    sigma_gp_[gp] = sigma;
 
 
 
@@ -294,13 +305,9 @@ namespace Mat
     std::cout << "[gp " << gp << "] START" << std::endl;
     C_M.print(std::cout);
     std::cout << "  eps      = " << eps << std::endl;
-    std::cout << "  xi_old   = " << xi_old << std::endl;
     std::cout << "  eps_L    = " << eps_L_ << std::endl;
     std::cout << "  E_A_     = " << E_A_ << ", E_M_ = " << E_M_ << std::endl;
     std::cout << "  sigma    = " << sigma << std::endl;
-    std::cout << "  xi_new   = " << xi_new << std::endl;
-    std::cout << "  dxi/dσ   = " << dxi_dsigma << std::endl;
-    std::cout << "  dσ/dε    = " << dσ_deps << std::endl;
   }
 
 }  // namespace Mat
