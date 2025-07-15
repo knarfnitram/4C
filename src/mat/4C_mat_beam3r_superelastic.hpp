@@ -143,6 +143,7 @@ namespace Mat
     void setup(int numgp_force, int numgp_moment) override;
     void reset() override;
     void update() override;
+    T compute_tangent_modulus(const T& gamma, const T& xi_new);
     void get_stiffness_matrix_of_forces(Core::LinAlg::Matrix<3, 3, T>& stiffness_matrix,
         const Core::LinAlg::Matrix<3, 3, T>& C_N, const int gp);
     void evaluate_force_contributions_to_stress(Core::LinAlg::Matrix<3, 1, T>& stressN,
@@ -158,6 +159,8 @@ namespace Mat
      */
     void get_constitutive_matrix_of_forces_material_frame(
         Core::LinAlg::Matrix<3, 3, T>& C_N) const override;
+    T compute_F_AS_from_gamma(const T& gamma);
+
 
     void get_stiffness_matrix_of_moments(Core::LinAlg::Matrix<3, 3, T>& stiffM,
         const Core::LinAlg::Matrix<3, 3, T>& C_M, const Core::LinAlg::Matrix<3, 1, T>& Cur,
@@ -170,8 +173,10 @@ namespace Mat
         Core::LinAlg::Matrix<3, 3, T>& C_M, const Core::LinAlg::Matrix<3, 1, T>& Gamma,
         int gp) override;
 
-    T compute_martensite_fraction(T M, T xi_prev) const;
-    T compute_dxi_dsigma(T sigma) const;
+    T compute_F_AS_uniaxial(const Core::LinAlg::Matrix<3, 1, T>& stressN);
+    T compute_xiAS_s(const Core::LinAlg::Matrix<3, 1, T>& gamma, T xi);
+    T compute_xiSA_s(const Core::LinAlg::Matrix<3, 1, T>& gamma, T xi);
+
 
    protected:
     double get_moment_start() const { return M_s_; }
@@ -180,6 +185,35 @@ namespace Mat
 
 
    private:
+    std::vector<T> xi_s;           // single-variant martensite
+    std::vector<T> xi_s_prev;      // single-variant martensite
+    std::vector<T> delta_xi_s_AS;  // single-variant martensite
+    std::vector<T> xi_s_AS_prev;   // single-variant martensite
+    std::vector<T> delta_xi_s_SA;  // single-variant martensite
+    std::vector<T> xi_s_SA_prev;   // single-variant martensite
+
+    double sigma_fAS, sigma_sAS;
+    double sigma_sSA, sigma_fSA;
+
+
+    double T_sAS = 300.0;
+    double T_fAS = 20;
+
+    double T_sSA = 300.0;
+    double T_fSA = 20;
+
+
+    double alpha = 0.15;
+    double beta_AS = 20.0;
+    double beta_SA = 20.0;
+    double temperature = 0.0;
+
+    double C_SS = 0.0;
+    double C_AS = 5.0;
+    double C_SA = 5.0;
+    double shear_modulus_, cross_section_area_, shear_correction_factor_, bulk_modulus_;
+
+    // old stuff
     std::vector<T> xi_old_;                                 // Axial martensite fraction
     std::vector<T> xi_curr_;                                // current Axial martensite fraction
     std::vector<T> xi_m_;                                   // Bending martensite fraction
@@ -187,10 +221,10 @@ namespace Mat
     std::vector<T> sigma_gp_;                               // Axial stress history
     std::vector<Core::LinAlg::Matrix<3, 1, T>> moment_gp_;  // Moment vector
 
-    double E_A_, E_M_, eps_L_, sigma_s_, sigma_f_;
+    double E_A_, E_M_, gamma_l_;
     double kappa_L_, M_s_, M_f_;
     double martensite_update_step_;
-    double shear_modulus_, cross_section_area_, shear_correction_factor_;
+
     double torsional_rigidity_;
     double tol_ = 1e-6;
 
