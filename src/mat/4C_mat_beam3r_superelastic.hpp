@@ -180,7 +180,7 @@ namespace Mat
 
 
    private:
-    std::vector<T> xi_;                                     // Axial martensite fraction
+    std::vector<T> xi_old_;                                 // Axial martensite fraction
     std::vector<T> xi_curr_;                                // current Axial martensite fraction
     std::vector<T> xi_m_;                                   // Bending martensite fraction
     std::vector<T> xi_m_curr_;                              // current Bending martensite prev
@@ -192,6 +192,7 @@ namespace Mat
     double martensite_update_step_;
     double shear_modulus_, cross_section_area_, shear_correction_factor_;
     double torsional_rigidity_;
+    double tol_ = 1e-6;
 
     /// Number of integration points for forces
     unsigned int numgp_force_;

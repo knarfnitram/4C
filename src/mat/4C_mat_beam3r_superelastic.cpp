@@ -77,7 +77,7 @@ namespace Mat
   template <typename T>
   void BeamNitinolMaterial<T>::setup(int numgp_force, int numgp_moment)
   {
-    xi_.resize(numgp_force, 0.0);
+    xi_old_.resize(numgp_force, 0.0);
     xi_curr_.resize(numgp_force, 0.0);
     sigma_gp_.resize(numgp_force, 0.0);
     xi_m_.resize(numgp_moment, 0.0);
@@ -89,7 +89,7 @@ namespace Mat
 
     for (int gp = 0; gp < numgp_force; gp++)
     {
-      xi_[gp] = 0.0;
+      xi_old_[gp] = 0.0;
       xi_curr_[gp] = 0.0;
       sigma_gp_[gp] = 0.0;
     }
@@ -104,15 +104,15 @@ namespace Mat
   template <typename T>
   void BeamNitinolMaterial<T>::reset()
   {
-    /*for (unsigned int gp = 0; gp < numgp_force_; gp++)
+    for (unsigned int gp = 0; gp < numgp_force_; gp++)
     {
-      xi_curr_[gp] = xi_[gp];
+      xi_curr_[gp] = xi_old_[gp];
     }
 
     for (unsigned int gp = 0; gp < numgp_moment_; gp++)
     {
       xi_m_curr_[gp] = xi_m_[gp];
-    }*/
+    }
   }
 
   template <typename T>
@@ -120,7 +120,7 @@ namespace Mat
   {
     for (unsigned int gp = 0; gp < numgp_force_; gp++)
     {
-      xi_[gp] = xi_curr_[gp];
+      xi_old_[gp] = xi_curr_[gp];
     }
 
     for (unsigned int gp = 0; gp < numgp_moment_; gp++)
@@ -134,22 +134,7 @@ namespace Mat
       Core::LinAlg::Matrix<3, 1, T>& stressN, const Core::LinAlg::Matrix<3, 3, T>& CN,
       const Core::LinAlg::Matrix<3, 1, T>& Gamma, const unsigned int gp)
   {
-    // Full nonlinear superelastic constitutive model
-    T eps = Gamma(0);
-    T xi = xi_curr_[gp];  // use the updated xi
-    T E_eff = (1 - xi) * E_A_ + xi * E_M_;
-    T eps_tr = xi * eps_L_;
-    T sigma = E_eff * (eps - eps_tr);
-    if (std::abs(sigma) > sigma_s_ && xi < 1.0)
-      xi = std::min(1.0, xi + martensite_update_step_);
-    else if (std::abs(sigma) < sigma_f_ && xi > 0.0)
-      xi = std::max(0.0, xi - martensite_update_step_);
-    E_eff = (1 - xi) * E_A_ + xi * E_M_;
-    eps_tr = xi * eps_L_;
-    sigma = E_eff * (eps - eps_tr);
-    sigma_gp_[gp] = sigma;
-
-    stressN(0) = sigma;
+    stressN(0) = sigma_gp_[gp];
     stressN(1) = 0.0;
     stressN(2) = 0.0;
     // compute material stresses by multiplying strains with constitutive matrix
@@ -190,7 +175,14 @@ namespace Mat
       Core::LinAlg::Matrix<3, 3, T>& stiffness_matrix, const Core::LinAlg::Matrix<3, 3, T>& C_N,
       const int gp)
   {
-    stiffness_matrix = C_N;
+    T A = this->cross_section_area_;
+    T G = this->shear_modulus_;
+    T kappa = this->shear_correction_factor_;
+
+    stiffness_matrix.clear();
+    stiffness_matrix(0, 0) = sigma_gp_[gp] * A;
+    stiffness_matrix(1, 1) = G * A * kappa;
+    stiffness_matrix(2, 2) = G * A * kappa;
   }
 
 
@@ -235,6 +227,7 @@ namespace Mat
   void Mat::BeamNitinolMaterial<T>::compute_constitutive_parameter(
       Core::LinAlg::Matrix<3, 3, T>& C_N, Core::LinAlg::Matrix<3, 3, T>& C_M)
   {
+    for
   }
 
   template <typename T>
@@ -255,49 +248,71 @@ namespace Mat
       Core::LinAlg::Matrix<3, 3, T>& C_N, Core::LinAlg::Matrix<3, 3, T>& C_M,
       const Core::LinAlg::Matrix<3, 1, T>& Gamma, const int gp)
   {
+    double xi_old = xi_old_[gp];
+    double xi = xi_old;
     T eps = Gamma(0);
 
     // Initial trial stress assuming xi is still 0
     T sigma_trial = E_A_ * eps;
 
     // Compute xi based on trial stress
-    T xi = compute_martensite_fraction(sigma_trial, 0.0);
+    // double xi = compute_martensite_fraction(sigma_trial, 0.0);
 
-    // Update effective modulus and transformation strain
-    T E_eff = (1 - xi) * E_A_ + xi * E_M_;
-    T eps_tr = xi * eps_L_;
-    T sigma = E_eff * (eps - eps_tr);
+    T E_eff = 0.0;
+    T dEeff_dxi = 0.0;
+    T dsigma_dxi = 0.0;
+    T eps_tr = 0.0;
+    T sigma = 0.0;
 
-    // Compute dxi/dσ and consistent tangent dσ/dε
-    T dxi_dsigma = 0.0;
-    if (sigma > sigma_f_ && sigma < sigma_s_) dxi_dsigma = 1.0 / (sigma_s_ - sigma_f_);
+    for (int k = 0; k < 50; ++k)
+    {
+      E_eff = (1 - xi) * E_A_ + xi * E_M_;
+      eps_tr = xi * eps_L_;
+      sigma = E_eff * (eps - eps_tr);
 
-    T dEeff_dxi = E_M_ - E_A_;
-    T denom = 1.0 + dxi_dsigma * (E_eff * eps_L_ - dEeff_dxi * (eps - eps_tr));
-    T dσ_dε = E_eff / denom;
+      T Phi = sigma - sigma_s_;
+      if (Phi < 0.0 || std::abs(xi - xi_old) < tol_) break;
+
+      T dxi_dPhi = 1.0 / (sigma_s_ - sigma_f_);
+
+      T R_xi = xi - xi_old - dxi_dPhi * Phi;
+      T dEeff_dxi = E_M_ - E_A_;
+      T deps_tr_dxi = eps_L_;
+      T dsigma_dxi = dEeff_dxi * (eps - eps_tr) - E_eff * deps_tr_dxi;
+      T dR_xi = 1.0 - dxi_dPhi * dsigma_dxi;
+
+      xi += -R_xi / dR_xi;
+      xi = std::clamp(xi, 0.0, 1.0);
+    }
+
+    // Recompute final E_eff, eps_tr, sigma
+    E_eff = (1 - xi) * E_A_ + xi * E_M_;
+    eps_tr = xi * eps_L_;
+    sigma = E_eff * (eps - eps_tr);
+
+    // Final tangent
+    T dxi_dsigma = 1.0 / (sigma_s_ - sigma_f_);
+    T dσ_dε = E_eff / (1.0 + dxi_dsigma * (E_eff * eps_L_ - (E_M_ - E_A_) * (eps - eps_tr)));
+
+    // Store
+    xi_curr_[gp] = xi;
+    sigma_gp_[gp] = sigma;
 
 
     // Final stiffness matrix assembly
     T A = this->cross_section_area_;
     T G = this->shear_modulus_;
     T kappa = this->shear_correction_factor_;
-
     C_N.clear();
     C_N(0, 0) = dσ_dε * A;
     C_N(1, 1) = G * A * kappa;
     C_N(2, 2) = G * A * kappa;
 
     // Moment matrix: keep it linear for now
-    T E_eff_m = (1.0 - xi) * E_A_ + xi * E_M_;
     C_M.clear();
     C_M(0, 0) = this->params().get_torsional_rigidity();
-    C_M(1, 1) = E_eff_m * this->params().get_mass_moment_of_inertia2();
-    C_M(2, 2) = E_eff_m * this->params().get_mass_moment_of_inertia3();
-
-    // Store for stress evaluation
-    xi_curr_[gp] = xi;
-    sigma_gp_[gp] = sigma;
-
+    C_M(1, 1) = E_eff * this->params().get_mass_moment_of_inertia2();
+    C_M(2, 2) = E_eff * this->params().get_mass_moment_of_inertia3();
 
 
     std::cout << std::scientific;
