@@ -337,14 +337,14 @@ void Solid::ModelEvaluator::BeamInteraction::set_sub_model_types()
     submodeltypes_->insert(Inpar::BeamInteraction::submodel_potential);
 
   // Check if all all combinations of submodel evaluators work
-  if (Teuchos::getIntegralValue<Inpar::BeamInteraction::Strategy>(
-          Global::Problem::instance()->beam_interaction_params().sublist("BEAM TO BEAM CONTACT"),
-          "STRATEGY") != Inpar::BeamInteraction::bstr_none and
-      beampenaltycouplingconditions.size() > 0)
-    FOUR_C_THROW(
-        "It is not yet possible to use beam-to-beam contact in combination with beam-to-beam point "
-        "coupling because every coupling point is also interpreted as a point of contact between 2 "
-        "beams.");
+  //if (Teuchos::getIntegralValue<Inpar::BeamInteraction::Strategy>(
+  //        Global::Problem::instance()->beam_interaction_params().sublist("BEAM TO BEAM CONTACT"),
+ //         "STRATEGY") != Inpar::BeamInteraction::bstr_none and
+      //beampenaltycouplingconditions.size() > 0)
+    //FOUR_C_THROW(
+    //    "It is not yet possible to use beam-to-beam contact in combination with beam-to-beam point "
+    //    "coupling because every coupling point is also interpreted as a point of contact between 2 "
+    //    "beams.");
 }
 
 /*----------------------------------------------------------------------------*
