@@ -108,7 +108,7 @@ namespace BeamInteraction
      */
     unsigned int get_num_all_active_contact_point_pairs() const override
     {
-      FOUR_C_THROW("get_num_all_active_contact_point_pairs not yet implemented!");
+      // FOUR_C_THROW("get_num_all_active_contact_point_pairs not yet implemented!");
       return 0;
     };
 
@@ -118,7 +118,7 @@ namespace BeamInteraction
     void get_all_active_contact_point_coords_element1(
         std::vector<Core::LinAlg::Matrix<3, 1, double>>& coords) const override
     {
-      FOUR_C_THROW("get_all_active_contact_point_coords_element1 not yet implemented!");
+      // FOUR_C_THROW("get_all_active_contact_point_coords_element1 not yet implemented!");
     }
 
     /**
@@ -127,7 +127,7 @@ namespace BeamInteraction
     void get_all_active_contact_point_coords_element2(
         std::vector<Core::LinAlg::Matrix<3, 1, double>>& coords) const override
     {
-      FOUR_C_THROW("get_all_active_contact_point_coords_element2 not yet implemented!");
+      // FOUR_C_THROW("get_all_active_contact_point_coords_element2 not yet implemented!");
     }
 
     /**
@@ -135,7 +135,7 @@ namespace BeamInteraction
      */
     void get_all_active_contact_forces(std::vector<double>& forces) const override
     {
-      FOUR_C_THROW("get_all_active_contact_forces not yet implemented!");
+      // FOUR_C_THROW("get_all_active_contact_forces not yet implemented!");
     }
 
     /**
@@ -143,7 +143,7 @@ namespace BeamInteraction
      */
     void get_all_active_contact_gaps(std::vector<double>& gaps) const override
     {
-      FOUR_C_THROW("get_all_active_contact_gaps not yet implemented!");
+      // FOUR_C_THROW("get_all_active_contact_gaps not yet implemented!");
     }
 
     /**
@@ -151,7 +151,7 @@ namespace BeamInteraction
      */
     double get_energy() const override
     {
-      FOUR_C_THROW("get_energy not implemented yet!");
+      // FOUR_C_THROW("get_energy not implemented yet!");
       return 0.0;
     }
 
