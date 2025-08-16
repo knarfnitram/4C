@@ -191,8 +191,9 @@ void Core::LinearSolver::AMGNxN::MergeAndSolve::setup(BlockedMatrix matrix)
 
   // Set sol vector and rhs
   x_ = std::make_shared<Core::LinAlg::MultiVector<double>>(
-      a_->OperatorDomainMap(), 1);  // TODO this one might cause problems
-  b_ = std::make_shared<Core::LinAlg::MultiVector<double>>(a_->OperatorRangeMap(), 1);
+      Core::LinAlg::Map(a_->OperatorDomainMap()), 1);  // TODO this one might cause problems
+  b_ = std::make_shared<Core::LinAlg::MultiVector<double>>(
+      Core::LinAlg::Map(a_->OperatorRangeMap()), 1);
 
   // Create linear solver
   Teuchos::ParameterList solvparams;
@@ -765,8 +766,10 @@ void Core::LinearSolver::AMGNxN::DirectSolverWrapper::setup(
   a_ = std::dynamic_pointer_cast<Epetra_CrsMatrix>(matrix->epetra_matrix());
 
   // Set sol vector and rhs
-  x_ = std::make_shared<Core::LinAlg::MultiVector<double>>(a_->OperatorDomainMap(), 1);
-  b_ = std::make_shared<Core::LinAlg::MultiVector<double>>(a_->OperatorRangeMap(), 1);
+  x_ = std::make_shared<Core::LinAlg::MultiVector<double>>(
+      Core::LinAlg::Map(a_->OperatorDomainMap()), 1);
+  b_ = std::make_shared<Core::LinAlg::MultiVector<double>>(
+      Core::LinAlg::Map(a_->OperatorRangeMap()), 1);
 
   // Create linear solver. Default solver: UMFPACK
   const auto solvertype = params->get<std::string>("solver", "umfpack");

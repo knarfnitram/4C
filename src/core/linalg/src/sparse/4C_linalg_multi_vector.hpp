@@ -44,8 +44,7 @@ namespace Core::LinAlg
    public:
     /// Basic multi-vector constructor to create vector based on a map and initialize memory with
     /// zeros.
-    explicit MultiVector(const Epetra_BlockMap& Map, int num_columns, bool zeroOut = true);
-
+    ///
     explicit MultiVector(const Map& Map, int num_columns, bool zeroOut = true);
 
     explicit MultiVector(const Epetra_MultiVector& source);

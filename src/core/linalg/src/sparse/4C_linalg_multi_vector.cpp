@@ -18,11 +18,7 @@
 // NOLINTBEGIN(readability-identifier-naming)
 
 FOUR_C_NAMESPACE_OPEN
-template <typename T>
-Core::LinAlg::MultiVector<T>::MultiVector(const Epetra_BlockMap& Map, int num_columns, bool zeroOut)
-    : vector_(Utils::make_owner<Epetra_MultiVector>(Map, num_columns, zeroOut))
-{
-}
+
 template <typename T>
 Core::LinAlg::MultiVector<T>::MultiVector(
     const Core::LinAlg::Map& Map, int num_columns, bool zeroOut)
