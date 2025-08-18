@@ -33,8 +33,6 @@ namespace Core::LinAlg
 
    public:
     /// Basic vector constructor to create vector based on a map and initialize memory with zeros
-    explicit Vector(const Epetra_BlockMap& Map, bool zeroOut = true);
-
     explicit Vector(const Map& Map, bool zeroOut = true);
 
     /// Copy constructor from epetra to vector
@@ -286,8 +284,6 @@ namespace Core::LinAlg
   class Vector<int>
   {
    public:
-    explicit Vector(const Epetra_BlockMap& map, bool zeroOut = true);
-
     explicit Vector(const Map& map, bool zeroOut = true);
 
     Vector(const Map& map, int* values);
