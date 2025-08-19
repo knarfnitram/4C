@@ -3,7 +3,9 @@ name: nightly_tests
 on:
   schedule:
     - cron: '0 22 * * *'
-
+  push:
+    branches:
+      - try-to-fix-failing-nightlypipeline
 jobs:
   gcc13_assertions_build:
     runs-on: ubuntu-latest
