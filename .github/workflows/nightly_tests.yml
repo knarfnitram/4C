@@ -5,7 +5,7 @@ on:
     - cron: '0 22 * * *'
   push:
     branches:
-      - try-to-fix-failing-nightlypipeline
+      - try-to-fix-clang-pipeline
 jobs:
   gcc13_assertions_build:
     runs-on: ubuntu-latest
