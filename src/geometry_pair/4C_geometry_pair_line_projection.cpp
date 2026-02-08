@@ -433,6 +433,7 @@ void GeometryPair::LineTo3DSegmentation<PairType>::evaluate(const PairType* pair
       bool last_segment_active = false;
       ProjectionPoint1DTo3D<scalar_type> segment_start;
       unsigned int counter = 0;
+      double allowed_segment_size = 1e-2;
       for (typename std::set<ProjectionPoint1DTo3D<scalar_type>>::iterator set_iterator =
                intersection_points.begin();
           set_iterator != intersection_points.end(); ++set_iterator)
@@ -484,16 +485,19 @@ void GeometryPair::LineTo3DSegmentation<PairType>::evaluate(const PairType* pair
                 Core::FADUtils::cast_to_double(segment_start.get_eta()),
                 Core::FADUtils::cast_to_double(start_point.get_eta()));
 
-            // Check if the segment already exists for this line.
-            if (segment_tracker.find(new_segment_double) == segment_tracker.end())
+            if (std::abs(segment_start.get_eta() - start_point.get_eta()) > allowed_segment_size)
             {
-              // Add the new segment to this pair and to the evaluation tracker.
-              segments.push_back(LineSegment<scalar_type>(segment_start, start_point));
-              segment_tracker.insert(new_segment_double);
+              // Check if the segment already exists for this line.
+              if (segment_tracker.find(new_segment_double) == segment_tracker.end())
+              {
+                // Add the new segment to this pair and to the evaluation tracker.
+                segments.push_back(LineSegment<scalar_type>(segment_start, start_point));
+                segment_tracker.insert(new_segment_double);
 
-              // Project the Gauss points on the segment.
-              LineTo3DBase<PairType>::project_gauss_points_on_segment_to_other(
-                  pair, element_data_line, element_data_other, segments.back());
+                // Project the Gauss points on the segment.
+                LineTo3DBase<PairType>::project_gauss_points_on_segment_to_other(
+                    pair, element_data_line, element_data_other, segments.back());
+              }
             }
 
             // Deactivate the current segment.
