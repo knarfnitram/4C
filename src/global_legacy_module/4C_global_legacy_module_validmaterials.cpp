@@ -3823,6 +3823,124 @@ std::unordered_map<Core::Materials::MaterialType, Core::IO::InputSpec> Global::v
   }
 
   /*--------------------------------------------------------------------*/
+  // material parameter definition for an isothermal reduced SMA / Nitinol
+  // Simo-Reissner beam material
+  {
+    known_materials[Core::Materials::m_beam_reissner_sma] = group("MAT_BeamReissnerSMA",
+        {
+            // Base Reissner beam elastic / geometric parameters
+            parameter<double>(
+                "YOUNG", {.description = "Young's modulus of the elastic reference material"}),
+
+            parameter<double>("DENS", {.description = "mass density"}),
+
+            parameter<double>("CROSSAREA", {.description = "cross-section area"}),
+
+            parameter<double>(
+                "POISSONRATIO", {.description = "Poisson's ratio", .default_value = -1.0}),
+
+            parameter<double>("SHEARCORR", {.description = "shear correction factor"}),
+
+            parameter<double>("MOMIN2",
+                {.description = "area moment of inertia with respect to material axis 2"}),
+
+            parameter<double>("MOMIN3",
+                {.description = "area moment of inertia with respect to material axis 3"}),
+
+            parameter<double>("MOMINPOL", {.description = "polar area moment of inertia"}),
+
+            parameter<bool>("FAD", {.description = "Does automatic differentiation have to be used",
+                                       .default_value = false}),
+
+            parameter<double>("INTERACTIONRADIUS",
+                {.description = "radius of a circular cross-section which is EXCLUSIVELY used to "
+                                "evaluate interactions such as contact, potentials, ...",
+                    .default_value = -1.0}),
+
+            // Reduced isothermal SMA model parameters
+            parameter<double>("TEMP",
+                {.description = "constant material temperature used by the isothermal SMA model"}),
+
+            parameter<double>("DSAMS",
+                {.description = "entropy difference between austenite and martensite phases"}),
+
+            parameter<double>("T0SMA", {.description = "SMA equilibrium temperature"}),
+
+            parameter<double>(
+                "WIN", {.description = "interaction energy parameter between phases"}),
+
+            parameter<double>("RM", {.description = "elastic-domain radius for austenite to "
+                                                    "multiple-variant martensite transformation"}),
+
+            parameter<double>(
+                "RSF0", {.description = "initial elastic-domain radius for forward austenite to "
+                                        "single-variant martensite transformation"}),
+
+            parameter<double>(
+                "RSR0", {.description = "initial elastic-domain radius for reverse single-variant "
+                                        "martensite to austenite transformation"}),
+
+            parameter<double>("HSF", {.description = "forward transformation hardening parameter"}),
+
+            parameter<double>("HSR", {.description = "reverse transformation hardening parameter"}),
+
+            parameter<double>("CTS",
+                {.description = "temperature-dependent reverse transformation radius parameter"}),
+
+            parameter<double>("ASF0",
+                {.description = "forward smoothing/hardening parameter active near vS = 0"}),
+
+            parameter<double>("ASF1",
+                {.description = "forward smoothing/hardening parameter active near vS = 1"}),
+
+            parameter<double>("ASR0",
+                {.description = "reverse smoothing/hardening parameter active near vS = 0"}),
+
+            parameter<double>("ASR1",
+                {.description = "reverse smoothing/hardening parameter active near vS = 1"}),
+
+            parameter<double>(
+                "NEXP", {.description = "exponent in the smooth transformation-radius law, must "
+                                        "satisfy 0 < NEXP <= 1"}),
+
+            parameter<double>(
+                "EPSLN", {.description = "maximum axial transformation strain amplitude",
+                             .default_value = 0.0}),
+
+            parameter<double>(
+                "KAPPALM", {.description = "maximum bending transformation curvature amplitude",
+                               .default_value = 0.0}),
+
+            parameter<bool>("TORSIONSMA",
+                {.description = "activate SMA transformation also for torsional curvature",
+                    .default_value = false}),
+
+            // Local Newton / regularization parameters
+            parameter<double>("FBREG",
+                {.description =
+                        "regularization parameter for Fischer-Burmeister complementarity functions",
+                    .default_value = 1.0e-10}),
+
+            parameter<double>(
+                "RSREG", {.description = "regularization parameter for the transformation-radius "
+                                         "powers near vS = 0 and vS = 1",
+                             .default_value = 1.0e-8}),
+
+            parameter<double>("LOCALTOL",
+                {.description = "local Newton tolerance for the SMA phase-fraction solve",
+                    .default_value = 1.0e-10}),
+
+            parameter<int>("LOCALITER", {.description = "maximum number of local Newton iterations "
+                                                        "for the SMA phase-fraction solve",
+                                            .default_value = 50}),
+        },
+        {.description =
+                "material parameters for an isothermal reduced Nitinol/SMA Simo-Reissner "
+                "beam material based on the simplified Auricchio phase-transformation model"});
+  }
+
+
+  /*--------------------------------------------------------------------*/
   // material parameter definition for a torsion-free, isotropic
   // Kirchhoff-Love type beam element
   {

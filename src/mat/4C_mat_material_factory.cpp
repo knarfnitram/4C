@@ -12,6 +12,7 @@
 #include "4C_legacy_enum_definitions_materials.hpp"
 #include "4C_mat_aaaneohooke.hpp"
 #include "4C_mat_beam3r_plasticity.hpp"
+#include "4C_mat_beam3r_sma.hpp"
 #include "4C_mat_beam_elasthyper_parameter.hpp"
 #include "4C_mat_carreauyasuda.hpp"
 #include "4C_mat_cnst_1d_art.hpp"
@@ -961,6 +962,10 @@ std::unique_ptr<Core::Mat::PAR::Parameter> Mat::make_parameter(
     {
       return make_parameter_impl<Mat::PAR::BeamReissnerElastPlasticMaterialParams>(
           id, type, input_data);
+    }
+    case Core::Materials::m_beam_reissner_sma:
+    {
+      return make_parameter_impl<Mat::PAR::BeamReissnerSMAMaterialParams>(id, type, input_data);
     }
     case Core::Materials::m_beam_reissner_elast_hyper_bymodes:
     {
