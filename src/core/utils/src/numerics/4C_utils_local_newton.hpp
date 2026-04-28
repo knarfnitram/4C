@@ -38,7 +38,6 @@ namespace Core::Utils
   {
     x -= residuum / jacobian;
   }
-
   template <unsigned n, typename ScalarType>
   void local_newton_iteration(Core::LinAlg::Matrix<n, 1, ScalarType>& x,
       const Core::LinAlg::Matrix<n, 1, ScalarType>& residuum,
@@ -82,6 +81,90 @@ namespace Core::Utils
       x(i) -= dx(i);
     }
   }
+  /// @}
+  /// @brief Compute Newton correction dx from J dx = residuum.
+  /// The actual Newton update is x -= dx.
+  /// @{
+  template <typename ScalarType>
+  ScalarType local_newton_correction(const ScalarType residuum, const ScalarType jacobian)
+  {
+    return residuum / jacobian;
+  }
+
+  template <unsigned n, typename ScalarType>
+  Core::LinAlg::Matrix<n, 1, ScalarType> local_newton_correction(
+      const Core::LinAlg::Matrix<n, 1, ScalarType>& residuum,
+      Core::LinAlg::Matrix<n, n, ScalarType>&& jacobian)
+  {
+    if constexpr (n < 4)
+    {
+      jacobian.invert();
+    }
+    else
+    {
+      Core::LinAlg::FixedSizeSerialDenseSolver<n, n> serial_dense_solver;
+      serial_dense_solver.set_matrix(jacobian);
+      serial_dense_solver.invert();
+    }
+
+    Core::LinAlg::Matrix<n, 1, ScalarType> dx(Core::LinAlg::Initialization::zero);
+    dx.multiply_nn(1.0, jacobian, residuum, 0.0);
+    return dx;
+  }
+
+  template <typename Tensor1, typename Tensor2>
+    requires(Core::LinAlg::is_tensor<Tensor1> && Core::LinAlg::is_tensor<Tensor2>)
+  auto local_newton_correction(const Tensor1& residuum, Tensor2&& jacobian)
+  {
+    return Core::LinAlg::inv(jacobian) * residuum;
+  }
+
+  inline Core::LinAlg::SerialDenseVector local_newton_correction(
+      const Core::LinAlg::SerialDenseVector& residuum, Core::LinAlg::SerialDenseMatrix&& jacobian)
+  {
+    Core::LinAlg::SerialDenseVector dx(residuum.length(), true);
+    Core::LinAlg::SerialDenseVector rhs(residuum);
+    Core::LinAlg::SerialDenseSolver solver;
+    solver.set_matrix(jacobian);
+    solver.set_vectors(dx, rhs);
+    solver.factor_with_equilibration(true);
+    solver.factor();
+    solver.solve();
+
+    return dx;
+  }
+  /// @brief Apply x -= alpha * dx.
+  /// @{
+  template <typename ScalarType>
+  void apply_damped_newton_correction(ScalarType& x, const ScalarType& dx, const ScalarType alpha)
+  {
+    x -= alpha * dx;
+  }
+
+  template <unsigned n, typename ScalarType>
+  void apply_damped_newton_correction(Core::LinAlg::Matrix<n, 1, ScalarType>& x,
+      const Core::LinAlg::Matrix<n, 1, ScalarType>& dx, const ScalarType alpha)
+  {
+    x.update(-alpha, dx, 1.0);
+  }
+
+  template <typename Tensor1, typename Tensor2, typename ScalarType>
+    requires(Core::LinAlg::is_tensor<Tensor1> && Core::LinAlg::is_tensor<Tensor2>)
+  void apply_damped_newton_correction(Tensor1& x, const Tensor2& dx, const ScalarType alpha)
+  {
+    x -= alpha * dx;
+  }
+
+  inline void apply_damped_newton_correction(Core::LinAlg::SerialDenseVector& x,
+      const Core::LinAlg::SerialDenseVector& dx, const double alpha)
+  {
+    for (int i = 0; i < x.length(); ++i)
+    {
+      x(i) -= alpha * dx(i);
+    }
+  }
+  /// @}
+
   /// @}
 
   /// @brief Free functions defining a to compute the L2-norm of the used Vector Type
@@ -251,6 +334,117 @@ namespace Core::Utils
     return std::get<0>(solve_local_newton_and_return_jacobian(
         residuum_and_jacobian_evaluator, x_0, tolerance, max_iterations));
   }
+
+  /*!
+   * @brief Finds the root of a function using damped Newton-Raphson with backtracking line search.
+   *
+   * This variant keeps the same evaluator interface as solve_local_newton_and_return_jacobian:
+   *
+   * @code
+   * auto evaluator = [](VectorType x)
+   * {
+   *   return std::make_tuple(residuum, jacobian);
+   * };
+   * @endcode
+   *
+   * The trial update is
+   *
+   *   x_trial = x - alpha * J^{-1} R
+   *
+   * and alpha is reduced until the residual norm decreases sufficiently.
+   */
+  template <typename ScalarType, typename VectorType, typename ResiduumAndJacobianEvaluator>
+  auto solve_local_newton_damped_and_return_jacobian(
+      ResiduumAndJacobianEvaluator residuum_and_jacobian_evaluator, VectorType x_0,
+      const ScalarType tolerance = LOCAL_NEWTON_DEFAULT_TOLERANCE,
+      const unsigned max_iterations = LOCAL_NEWTON_DEFAULT_MAXIMUM_ITERATIONS,
+      const unsigned max_line_search_iterations = 20,
+      const ScalarType minimum_step_length = 1.0e-10, const ScalarType armijo_parameter = 1.0e-4)
+      -> std::tuple<VectorType,
+          std::tuple_element_t<1, decltype(residuum_and_jacobian_evaluator(x_0))>>
+  {
+    auto [residuum, jacobian] = residuum_and_jacobian_evaluator(x_0);
+
+    unsigned iteration = 0;
+    while (l2_norm(residuum) > tolerance)
+    {
+      if (iteration > max_iterations)
+      {
+        FOUR_C_THROW(
+            "The damped local Newton method did not converge within {} iterations. Residuum is "
+            "{:.3e} > {:.3e}.",
+            max_iterations, FADUtils::cast_to_double(l2_norm(residuum)),
+            FADUtils::cast_to_double(tolerance));
+      }
+
+      const auto old_residuum_norm = l2_norm(residuum);
+
+      auto dx = local_newton_correction(residuum, std::move(jacobian));
+
+      bool accepted = false;
+      ScalarType alpha = 1.0;
+
+      VectorType x_trial = x_0;
+      decltype(residuum) residuum_trial = residuum;
+      decltype(jacobian) jacobian_trial;
+
+      for (unsigned line_search_iteration = 0; line_search_iteration < max_line_search_iterations;
+          ++line_search_iteration)
+      {
+        x_trial = x_0;
+        apply_damped_newton_correction(x_trial, dx, alpha);
+
+        std::tie(residuum_trial, jacobian_trial) = residuum_and_jacobian_evaluator(x_trial);
+
+        const auto trial_residuum_norm = l2_norm(residuum_trial);
+
+        if (trial_residuum_norm <= (1.0 - armijo_parameter * alpha) * old_residuum_norm)
+        {
+          x_0 = x_trial;
+          residuum = residuum_trial;
+          jacobian = jacobian_trial;
+          accepted = true;
+          break;
+        }
+
+        alpha *= 0.5;
+
+        if (alpha < minimum_step_length) break;
+      }
+
+      if (!accepted)
+      {
+        FOUR_C_THROW(
+            "The damped local Newton line search failed. Residuum is {:.3e}, minimum step length "
+            "is {:.3e}.",
+            FADUtils::cast_to_double(old_residuum_norm),
+            FADUtils::cast_to_double(minimum_step_length));
+      }
+
+      ++iteration;
+    }
+
+    return {x_0, jacobian};
+  }
+
+  /*!
+   * @brief Finds the root of a function using damped Newton-Raphson with backtracking line search.
+   *
+   * This function only returns the converged local unknown.
+   */
+  template <typename ScalarType, typename VectorType, typename ResiduumAndJacobianEvaluator>
+  auto solve_local_newton_damped(ResiduumAndJacobianEvaluator residuum_and_jacobian_evaluator,
+      VectorType x_0, const ScalarType tolerance = LOCAL_NEWTON_DEFAULT_TOLERANCE,
+      const unsigned max_iterations = LOCAL_NEWTON_DEFAULT_MAXIMUM_ITERATIONS,
+      const unsigned max_line_search_iterations = 20,
+      const ScalarType minimum_step_length = 1.0e-10, const ScalarType armijo_parameter = 1.0e-4)
+      -> VectorType
+  {
+    return std::get<0>(solve_local_newton_damped_and_return_jacobian(
+        residuum_and_jacobian_evaluator, x_0, tolerance, max_iterations, max_line_search_iterations,
+        minimum_step_length, armijo_parameter));
+  }
+
 
 }  // namespace Core::Utils
 

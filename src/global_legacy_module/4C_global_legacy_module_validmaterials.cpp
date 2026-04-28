@@ -3828,16 +3828,27 @@ std::unordered_map<Core::Materials::MaterialType, Core::IO::InputSpec> Global::v
   {
     known_materials[Core::Materials::m_beam_reissner_sma] = group("MAT_BeamReissnerSMA",
         {
-            // Base Reissner beam elastic / geometric parameters
+            // Austenite/reference elastic and geometric beam parameters
             parameter<double>(
-                "YOUNG", {.description = "Young's modulus of the elastic reference material"}),
+                "YOUNG", {.description = "Young's modulus of austenite / elastic reference phase"}),
+
+            parameter<double>(
+                "SHEARMOD", {.description = "shear modulus of austenite / elastic reference phase",
+                                .default_value = -1.0}),
+
+            parameter<double>("POISSONRATIO",
+                {.description = "Poisson's ratio of austenite / elastic reference phase",
+                    .default_value = -1.0}),
+
+            parameter<double>("YOUNGMART",
+                {.description = "Young's modulus of martensite / martensitic mixture"}),
+
+            parameter<double>("SHEARMODMART",
+                {.description = "shear modulus of martensite / martensitic mixture"}),
 
             parameter<double>("DENS", {.description = "mass density"}),
 
             parameter<double>("CROSSAREA", {.description = "cross-section area"}),
-
-            parameter<double>(
-                "POISSONRATIO", {.description = "Poisson's ratio", .default_value = -1.0}),
 
             parameter<double>("SHEARCORR", {.description = "shear correction factor"}),
 
@@ -3857,9 +3868,10 @@ std::unordered_map<Core::Materials::MaterialType, Core::IO::InputSpec> Global::v
                                 "evaluate interactions such as contact, potentials, ...",
                     .default_value = -1.0}),
 
-            // Reduced isothermal SMA model parameters
+            // Prescribed-temperature reduced SMA model parameters
             parameter<double>("TEMP",
-                {.description = "constant material temperature used by the isothermal SMA model"}),
+                {.description = "constant fallback material temperature used if no temperature "
+                                "function is prescribed"}),
 
             parameter<double>("DSAMS",
                 {.description = "entropy difference between austenite and martensite phases"}),
@@ -3869,8 +3881,9 @@ std::unordered_map<Core::Materials::MaterialType, Core::IO::InputSpec> Global::v
             parameter<double>(
                 "WIN", {.description = "interaction energy parameter between phases"}),
 
-            parameter<double>("RM", {.description = "elastic-domain radius for austenite to "
-                                                    "multiple-variant martensite transformation"}),
+            parameter<double>(
+                "RM", {.description = "elastic-domain radius for austenite to multiple-variant "
+                                      "martensite transformation"}),
 
             parameter<double>(
                 "RSF0", {.description = "initial elastic-domain radius for forward austenite to "
@@ -3899,9 +3912,9 @@ std::unordered_map<Core::Materials::MaterialType, Core::IO::InputSpec> Global::v
             parameter<double>("ASR1",
                 {.description = "reverse smoothing/hardening parameter active near vS = 1"}),
 
-            parameter<double>(
-                "NEXP", {.description = "exponent in the smooth transformation-radius law, must "
-                                        "satisfy 0 < NEXP <= 1"}),
+            parameter<double>("NEXP",
+                {.description = "exponent in the smooth transformation-radius law, must satisfy "
+                                "0 < NEXP <= 1"}),
 
             parameter<double>(
                 "EPSLN", {.description = "maximum axial transformation strain amplitude",
@@ -3921,22 +3934,30 @@ std::unordered_map<Core::Materials::MaterialType, Core::IO::InputSpec> Global::v
                         "regularization parameter for Fischer-Burmeister complementarity functions",
                     .default_value = 1.0e-10}),
 
-            parameter<double>(
-                "RSREG", {.description = "regularization parameter for the transformation-radius "
-                                         "powers near vS = 0 and vS = 1",
-                             .default_value = 1.0e-8}),
+            parameter<double>("RSREG",
+                {.description =
+                        "regularization parameter for the transformation-radius powers near "
+                        "vS = 0 and vS = 1",
+                    .default_value = 1.0e-8}),
 
             parameter<double>("LOCALTOL",
                 {.description = "local Newton tolerance for the SMA phase-fraction solve",
                     .default_value = 1.0e-10}),
 
-            parameter<int>("LOCALITER", {.description = "maximum number of local Newton iterations "
-                                                        "for the SMA phase-fraction solve",
-                                            .default_value = 50}),
+            parameter<int>("LOCALITER",
+                {.description = "maximum number of local Newton iterations for the SMA "
+                                "phase-fraction solve",
+                    .default_value = 50}),
+
+            parameter<bool>("CONSISTENTTANGENT",
+                {.description = "compute numerical algorithmic tangent by resolving the local SMA "
+                                "update; otherwise use frozen-phase elastic tangent",
+                    .default_value = false}),
         },
-        {.description =
-                "material parameters for an isothermal reduced Nitinol/SMA Simo-Reissner "
-                "beam material based on the simplified Auricchio phase-transformation model"});
+        {.description = "material parameters for a prescribed-temperature reduced Nitinol/SMA "
+                        "Simo-Reissner beam material with phase-dependent stiffness based on the "
+                        "simplified "
+                        "Auricchio phase-transformation model"});
   }
 
 

@@ -12,10 +12,13 @@
 #include "4C_mat_par_bundle.hpp"
 #include "4C_utils_exceptions.hpp"
 #include "4C_utils_fad.hpp"
+#include "4C_utils_local_newton.hpp"
 
 #include <algorithm>
 #include <cmath>
 #include <limits>
+#include <tuple>
+#include <utility>
 
 FOUR_C_NAMESPACE_OPEN
 
@@ -46,7 +49,19 @@ Mat::PAR::BeamReissnerSMAMaterialParams::BeamReissnerSMAMaterialParams(
       fb_regularization_(matdata.parameters.get<double>("FBREG")),
       rs_regularization_(matdata.parameters.get<double>("RSREG")),
       local_newton_tol_(matdata.parameters.get<double>("LOCALTOL")),
-      local_newton_maxiter_(matdata.parameters.get<int>("LOCALITER"))
+      local_newton_maxiter_(matdata.parameters.get<int>("LOCALITER")),
+      youngs_modulus_austenite_(matdata.parameters.get<double>("YOUNG")),
+      youngs_modulus_martensite_(matdata.parameters.get<double>("YOUNGMART")),
+      shear_modulus_austenite_(Mat::PAR::determine_shear_modulus(matdata)),
+      shear_modulus_martensite_(matdata.parameters.get<double>("SHEARMODMART")),
+      density_(matdata.parameters.get<double>("DENS")),
+      cross_section_area_(matdata.parameters.get<double>("CROSSAREA")),
+      shear_correction_factor_(matdata.parameters.get<double>("SHEARCORR")),
+      area_moment_inertia_polar_(matdata.parameters.get<double>("MOMINPOL")),
+      area_moment_inertia_2_(matdata.parameters.get<double>("MOMIN2")),
+      area_moment_inertia_3_(matdata.parameters.get<double>("MOMIN3")),
+      radius_interaction_(matdata.parameters.get<double>("INTERACTIONRADIUS")),
+      use_consistent_tangent_(matdata.parameters.get<bool>("CONSISTENTTANGENT"))
 {
   if (eps_l_n_ <= 0.0 && kappa_l_m_ <= 0.0)
   {
@@ -61,6 +76,18 @@ Mat::PAR::BeamReissnerSMAMaterialParams::BeamReissnerSMAMaterialParams(
   if (rs_regularization_ <= 0.0) FOUR_C_THROW("RSREG must be positive.");
   if (local_newton_tol_ <= 0.0) FOUR_C_THROW("LOCALTOL must be positive.");
   if (local_newton_maxiter_ < 1) FOUR_C_THROW("LOCALITER must be positive.");
+
+  if (youngs_modulus_austenite_ <= 0.0) FOUR_C_THROW("YOUNG must be positive.");
+  if (youngs_modulus_martensite_ <= 0.0) FOUR_C_THROW("YOUNGMART must be positive.");
+  if (shear_modulus_austenite_ <= 0.0) FOUR_C_THROW("austenite shear modulus must be positive.");
+  if (shear_modulus_martensite_ <= 0.0) FOUR_C_THROW("SHEARMODMART must be positive.");
+
+  if (density_ < 0.0) FOUR_C_THROW("DENS must be non-negative.");
+  if (cross_section_area_ <= 0.0) FOUR_C_THROW("CROSSAREA must be positive.");
+  if (shear_correction_factor_ <= 0.0) FOUR_C_THROW("SHEARCORR must be positive.");
+  if (area_moment_inertia_polar_ < 0.0) FOUR_C_THROW("MOMINPOL must be non-negative.");
+  if (area_moment_inertia_2_ < 0.0) FOUR_C_THROW("MOMIN2 must be non-negative.");
+  if (area_moment_inertia_3_ < 0.0) FOUR_C_THROW("MOMIN3 must be non-negative.");
 }
 
 std::shared_ptr<Core::Mat::Material> Mat::PAR::BeamReissnerSMAMaterialParams::create_material()
@@ -133,130 +160,50 @@ double Mat::BeamSMAMaterial<T>::dot(const Vec3& a, const Vec3& b)
 }
 
 template <typename T>
-double Mat::BeamSMAMaterial<T>::residual_norm(const Vec7& r)
-{
-  double n2 = 0.0;
-  for (double ri : r) n2 += ri * ri;
-  return std::sqrt(n2);
-}
-
-template <typename T>
-bool Mat::BeamSMAMaterial<T>::solve_linear_7x7(Mat7& A, Vec7& b)
-{
-  constexpr int n = 7;
-  for (int k = 0; k < n; ++k)
-  {
-    int pivot = k;
-    double maxabs = std::abs(A[k][k]);
-    for (int i = k + 1; i < n; ++i)
-    {
-      const double cand = std::abs(A[i][k]);
-      if (cand > maxabs)
-      {
-        maxabs = cand;
-        pivot = i;
-      }
-    }
-
-    if (maxabs < 1.0e-14) return false;
-
-    if (pivot != k)
-    {
-      std::swap(A[pivot], A[k]);
-      std::swap(b[pivot], b[k]);
-    }
-
-    for (int i = k + 1; i < n; ++i)
-    {
-      const double factor = A[i][k] / A[k][k];
-      A[i][k] = 0.0;
-      for (int j = k + 1; j < n; ++j) A[i][j] -= factor * A[k][j];
-      b[i] -= factor * b[k];
-    }
-  }
-
-  for (int i = n - 1; i >= 0; --i)
-  {
-    double sum = b[i];
-    for (int j = i + 1; j < n; ++j) sum -= A[i][j] * b[j];
-    b[i] = sum / A[i][i];
-  }
-
-  return true;
-}
-
-template <typename T>
 template <typename ResidualFunc>
 void Mat::BeamSMAMaterial<T>::numerical_jacobian(
     ResidualFunc&& residual, const Vec7& x, const Vec7& R, Mat7& J) const
 {
-  for (auto& row : J) row.fill(0.0);
+  J.clear();
 
   for (unsigned int j = 0; j < 7; ++j)
   {
     Vec7 xp = x;
-    const double h = 1.0e-8 * std::max(1.0, std::abs(x[j]));
-    xp[j] += h;
+    const double h = 1.0e-8 * std::max(1.0, std::abs(x(j)));
+    xp(j) += h;
 
-    Vec7 Rp{};
+    Vec7 Rp(Core::LinAlg::Initialization::zero);
     residual(xp, Rp);
 
-    for (unsigned int i = 0; i < 7; ++i) J[i][j] = (Rp[i] - R[i]) / h;
+    for (unsigned int i = 0; i < 7; ++i) J(i, j) = (Rp(i) - R(i)) / h;
   }
 }
+
 
 template <typename T>
 template <typename ResidualFunc>
 bool Mat::BeamSMAMaterial<T>::solve_nonlinear_system(ResidualFunc&& residual, Vec7& x) const
 {
-  const double tol = sma_params().get_local_newton_tol();
-  const int maxiter = sma_params().get_local_newton_maxiter();
-
-  Vec7 R{};
-  residual(x, R);
-  double nR = residual_norm(R);
-  if (nR < tol) return true;
-
-  for (int iter = 0; iter < maxiter; ++iter)
+  auto residual_and_jacobian = [&](Vec7 xin)
   {
-    Mat7 J{};
-    numerical_jacobian(residual, x, R, J);
+    Vec7 R(Core::LinAlg::Initialization::zero);
+    residual(xin, R);
 
-    Vec7 dx{};
-    for (unsigned int i = 0; i < 7; ++i) dx[i] = -R[i];
+    Mat7 J(Core::LinAlg::Initialization::zero);
+    numerical_jacobian(residual, xin, R, J);
 
-    if (!solve_linear_7x7(J, dx)) return false;
+    return std::make_tuple(R, J);
+  };
 
-    bool accepted = false;
-    double alpha = 1.0;
-    Vec7 xtrial{};
-    Vec7 Rtrial{};
+  x = Core::Utils::solve_local_newton_damped<double, Vec7>(residual_and_jacobian, x,
+      sma_params().get_local_newton_tol(),
+      static_cast<unsigned>(sma_params().get_local_newton_maxiter()),
+      40,       // max line-search iterations
+      1.0e-10,  // minimum step length
+      1.0e-4);  // Armijo parameter
 
-    for (int ls = 0; ls < 20; ++ls)
-    {
-      for (unsigned int i = 0; i < 7; ++i) xtrial[i] = x[i] + alpha * dx[i];
-      residual(xtrial, Rtrial);
-
-      const double nTrial = residual_norm(Rtrial);
-      if (nTrial <= (1.0 - 1.0e-4 * alpha) * nR)
-      {
-        x = xtrial;
-        R = Rtrial;
-        nR = nTrial;
-        accepted = true;
-        break;
-      }
-
-      alpha *= 0.5;
-    }
-
-    if (!accepted) return false;
-    if (nR < tol) return true;
-  }
-
-  return false;
+  return true;
 }
-
 /*-----------------------------------------------------------------------------------------------*/
 /* Material class                                                                                */
 /*-----------------------------------------------------------------------------------------------*/
@@ -377,13 +324,20 @@ void Mat::BeamSMAMaterial<T>::unpack(Core::Communication::UnpackBuffer& buffer)
 /* Constitutive helpers                                                                          */
 /*-----------------------------------------------------------------------------------------------*/
 template <typename T>
+double Mat::BeamSMAMaterial<T>::current_temperature() const
+{
+  if (temperature_function_) return temperature_function_(current_time_);
+  return sma_params().get_temperature();
+}
+
+template <typename T>
 double Mat::BeamSMAMaterial<T>::compute_rs(double bs, double vS) const
 {
   const double eps = sma_params().get_rs_regularization();
   const double n = sma_params().get_n_exp();
   const double vp = std::max(vS + eps, eps);
   const double omp = std::max(1.0 - vS + eps, eps);
-  const double dT = sma_params().get_temperature() - sma_params().get_t0_sma();
+  const double dT = current_temperature() - sma_params().get_t0_sma();
 
   if (bs >= 0.0)
   {
@@ -396,13 +350,89 @@ double Mat::BeamSMAMaterial<T>::compute_rs(double bs, double vS) const
 }
 
 template <typename T>
+void Mat::BeamSMAMaterial<T>::compute_phase_constitutive_matrices(
+    double vM, double vS, Mat3& C_N, Mat3& C_M, Mat3& dC_N, Mat3& dC_M) const
+{
+  C_N.clear();
+  C_M.clear();
+  dC_N.clear();
+  dC_M.clear();
+
+  const double m = vM + vS;
+
+  const double EA = sma_params().get_youngs_modulus_austenite();
+  const double EM = sma_params().get_youngs_modulus_martensite();
+  const double GA = sma_params().get_shear_modulus_austenite();
+  const double GM = sma_params().get_shear_modulus_martensite();
+
+  const double dinvE_dm = 1.0 / EM - 1.0 / EA;
+  const double dinvG_dm = 1.0 / GM - 1.0 / GA;
+
+  const double invE = 1.0 / EA + m * dinvE_dm;
+  const double invG = 1.0 / GA + m * dinvG_dm;
+
+  // During local Newton iterations the trial phase fractions can temporarily leave the
+  // admissible interval. Do not throw inside residual evaluation; keep stiffness finite.
+  const double invE_safe = std::max(invE, 1.0e-30);
+  const double invG_safe = std::max(invG, 1.0e-30);
+
+  const double E = 1.0 / invE_safe;
+  const double G = 1.0 / invG_safe;
+
+  // Since single- and multiple-variant martensite are represented by the same elastic phase here,
+  // dC/dvM = dC/dvS = dC/dm.
+  const double dE_dm = -E * E * dinvE_dm;
+  const double dG_dm = -G * G * dinvG_dm;
+
+  const double A = sma_params().get_sma_cross_section_area();
+  const double ks = sma_params().get_sma_shear_correction_factor();
+  const double J = sma_params().get_sma_moment_inertia_polar();
+  const double I2 = sma_params().get_sma_moment_inertia2();
+  const double I3 = sma_params().get_sma_moment_inertia3();
+
+  C_N(0, 0) = E * A;
+  C_N(1, 1) = G * A * ks;
+  C_N(2, 2) = G * A * ks;
+
+  C_M(0, 0) = G * J;
+  C_M(1, 1) = E * I2;
+  C_M(2, 2) = E * I3;
+
+  dC_N(0, 0) = dE_dm * A;
+  dC_N(1, 1) = dG_dm * A * ks;
+  dC_N(2, 2) = dG_dm * A * ks;
+
+  dC_M(0, 0) = dG_dm * J;
+  dC_M(1, 1) = dE_dm * I2;
+  dC_M(2, 2) = dE_dm * I3;
+}
+
+template <typename T>
+double Mat::BeamSMAMaterial<T>::quadratic_form(const Vec3& x, const Mat3& A) const
+{
+  double value = 0.0;
+  for (unsigned int i = 0; i < 3; ++i)
+    for (unsigned int j = 0; j < 3; ++j)
+      value += Core::FADUtils::cast_to_double(x(i)) * Core::FADUtils::cast_to_double(A(i, j)) *
+               Core::FADUtils::cast_to_double(x(j));
+  return value;
+}
+
+template <typename T>
 void Mat::BeamSMAMaterial<T>::choose_force_direction(
     const Vec3& Gamma, const LocalState& old_state, Vec3& dir) const
 {
   dir.put_scalar(0.0);
 
+  Mat3 C_N(Core::LinAlg::Initialization::zero);
+  Mat3 C_M_dummy(Core::LinAlg::Initialization::zero);
+  Mat3 dC_N_dummy(Core::LinAlg::Initialization::zero);
+  Mat3 dC_M_dummy(Core::LinAlg::Initialization::zero);
+  compute_phase_constitutive_matrices(Core::FADUtils::cast_to_double(old_state.vM),
+      Core::FADUtils::cast_to_double(old_state.vS), C_N, C_M_dummy, dC_N_dummy, dC_M_dummy);
+
   const double axial_trial =
-      this->params().get_axial_rigidity() *
+      Core::FADUtils::cast_to_double(C_N(0, 0)) *
       (Core::FADUtils::cast_to_double(Gamma(0)) -
           sma_params().get_eps_l_n() * Core::FADUtils::cast_to_double(old_state.vS) *
               Core::FADUtils::cast_to_double(old_state.dir(0)));
@@ -417,9 +447,16 @@ void Mat::BeamSMAMaterial<T>::choose_force_direction(
 
 template <typename T>
 void Mat::BeamSMAMaterial<T>::choose_moment_direction(
-    const Vec3& Cur, const Mat3& C_M, const LocalState& old_state, Vec3& dir) const
+    const Vec3& Cur, const LocalState& old_state, Vec3& dir) const
 {
   dir.put_scalar(0.0);
+
+  Mat3 C_N_dummy(Core::LinAlg::Initialization::zero);
+  Mat3 C_M(Core::LinAlg::Initialization::zero);
+  Mat3 dC_N_dummy(Core::LinAlg::Initialization::zero);
+  Mat3 dC_M_dummy(Core::LinAlg::Initialization::zero);
+  compute_phase_constitutive_matrices(Core::FADUtils::cast_to_double(old_state.vM),
+      Core::FADUtils::cast_to_double(old_state.vS), C_N_dummy, C_M, dC_N_dummy, dC_M_dummy);
 
   Vec3 kappa_tr(Core::LinAlg::Initialization::zero);
   compute_moment_transformation_curvature(
@@ -479,15 +516,21 @@ void Mat::BeamSMAMaterial<T>::compute_moment_transformation_curvature(
 
 template <typename T>
 void Mat::BeamSMAMaterial<T>::assemble_force_residual(const Vec7& x, const LocalState& old_state,
-    const Vec3& Gamma, const Mat3& C_N, const Vec3& dir, Vec7& R, Vec3* stress) const
+    const Vec3& Gamma, const Vec3& dir, Vec7& R, Vec3* stress) const
 {
-  const double vM = x[0];
-  const double dlamM = x[1];
-  const double cM0 = x[2];
-  const double vS = x[3];
-  const double dlamS = x[4];
-  const double cS0 = x[5];
-  const double cMS = x[6];
+  const double vM = x(0);
+  const double dlamM = x(1);
+  const double cM0 = x(2);
+  const double vS = x(3);
+  const double dlamS = x(4);
+  const double cS0 = x(5);
+  const double cMS = x(6);
+
+  Mat3 C_N(Core::LinAlg::Initialization::zero);
+  Mat3 C_M_dummy(Core::LinAlg::Initialization::zero);
+  Mat3 dC_N(Core::LinAlg::Initialization::zero);
+  Mat3 dC_M_dummy(Core::LinAlg::Initialization::zero);
+  compute_phase_constitutive_matrices(vM, vS, C_N, C_M_dummy, dC_N, dC_M_dummy);
 
   Vec3 gamma_tr(Core::LinAlg::Initialization::zero);
   compute_force_transformation_strain(vS, dir, gamma_tr);
@@ -499,15 +542,18 @@ void Mat::BeamSMAMaterial<T>::assemble_force_residual(const Vec7& x, const Local
   N.multiply(C_N, gamma_el);
   if (stress != nullptr) *stress = N;
 
-  const double therm = sma_params().get_delta_s_ams() *
-                           (sma_params().get_temperature() - sma_params().get_t0_sma()) +
-                       sma_params().get_w_in() * (1.0 - 2.0 * vM - 2.0 * vS);
+  const double dpsi_el_dv = 0.5 * quadratic_form(gamma_el, dC_N);
+
+  const double therm =
+      sma_params().get_delta_s_ams() * (current_temperature() - sma_params().get_t0_sma()) +
+      sma_params().get_w_in() * (1.0 - 2.0 * vM - 2.0 * vS);
 
   const double cM = cM0 + cMS;
   const double cS = cS0 + cMS;
 
-  const double BM = -therm - cM;
-  const double BS = sma_params().get_eps_l_n() * dot(dir, N) - therm - cS;
+  // B = -dW/dv.  The phase-dependent stiffness adds -0.5*q_el^T*(dC/dv)*q_el.
+  const double BM = -dpsi_el_dv - therm - cM;
+  const double BS = sma_params().get_eps_l_n() * dot(dir, N) - dpsi_el_dv - therm - cS;
 
   const double absBM = abs_reg(BM, sma_params().get_fb_regularization());
   const double absBS = abs_reg(BS, sma_params().get_fb_regularization());
@@ -515,26 +561,32 @@ void Mat::BeamSMAMaterial<T>::assemble_force_residual(const Vec7& x, const Local
   const double FM = absBM - sma_params().get_r_m();
   const double FS = absBS - compute_rs(BS, vS);
 
-  R[0] = vM - Core::FADUtils::cast_to_double(old_state.vM) - dlamM * BM / absBM;
-  R[1] = fb(FM, dlamM, sma_params().get_fb_regularization());
-  R[2] = fb(cM0, vM, sma_params().get_fb_regularization());
-  R[3] = vS - Core::FADUtils::cast_to_double(old_state.vS) - dlamS * BS / absBS;
-  R[4] = fb(FS, dlamS, sma_params().get_fb_regularization());
-  R[5] = fb(cS0, vS, sma_params().get_fb_regularization());
-  R[6] = fb(vM + vS - 1.0, cMS, sma_params().get_fb_regularization());
+  R(0) = vM - Core::FADUtils::cast_to_double(old_state.vM) - dlamM * BM / absBM;
+  R(1) = fb(FM, dlamM, sma_params().get_fb_regularization());
+  R(2) = fb(cM0, vM, sma_params().get_fb_regularization());
+  R(3) = vS - Core::FADUtils::cast_to_double(old_state.vS) - dlamS * BS / absBS;
+  R(4) = fb(FS, dlamS, sma_params().get_fb_regularization());
+  R(5) = fb(cS0, vS, sma_params().get_fb_regularization());
+  R(6) = fb(vM + vS - 1.0, cMS, sma_params().get_fb_regularization());
 }
 
 template <typename T>
 void Mat::BeamSMAMaterial<T>::assemble_moment_residual(const Vec7& x, const LocalState& old_state,
-    const Vec3& Cur, const Mat3& C_M, const Vec3& dir, Vec7& R, Vec3* stress) const
+    const Vec3& Cur, const Vec3& dir, Vec7& R, Vec3* stress) const
 {
-  const double vM = x[0];
-  const double dlamM = x[1];
-  const double cM0 = x[2];
-  const double vS = x[3];
-  const double dlamS = x[4];
-  const double cS0 = x[5];
-  const double cMS = x[6];
+  const double vM = x(0);
+  const double dlamM = x(1);
+  const double cM0 = x(2);
+  const double vS = x(3);
+  const double dlamS = x(4);
+  const double cS0 = x(5);
+  const double cMS = x(6);
+
+  Mat3 C_N_dummy(Core::LinAlg::Initialization::zero);
+  Mat3 C_M(Core::LinAlg::Initialization::zero);
+  Mat3 dC_N_dummy(Core::LinAlg::Initialization::zero);
+  Mat3 dC_M(Core::LinAlg::Initialization::zero);
+  compute_phase_constitutive_matrices(vM, vS, C_N_dummy, C_M, dC_N_dummy, dC_M);
 
   Vec3 kappa_tr(Core::LinAlg::Initialization::zero);
   compute_moment_transformation_curvature(vS, dir, kappa_tr);
@@ -546,15 +598,17 @@ void Mat::BeamSMAMaterial<T>::assemble_moment_residual(const Vec7& x, const Loca
   M.multiply(C_M, kappa_el);
   if (stress != nullptr) *stress = M;
 
-  const double therm = sma_params().get_delta_s_ams() *
-                           (sma_params().get_temperature() - sma_params().get_t0_sma()) +
-                       sma_params().get_w_in() * (1.0 - 2.0 * vM - 2.0 * vS);
+  const double dpsi_el_dv = 0.5 * quadratic_form(kappa_el, dC_M);
+
+  const double therm =
+      sma_params().get_delta_s_ams() * (current_temperature() - sma_params().get_t0_sma()) +
+      sma_params().get_w_in() * (1.0 - 2.0 * vM - 2.0 * vS);
 
   const double cM = cM0 + cMS;
   const double cS = cS0 + cMS;
 
-  const double BM = -therm - cM;
-  const double BS = sma_params().get_kappa_l_m() * dot(dir, M) - therm - cS;
+  const double BM = -dpsi_el_dv - therm - cM;
+  const double BS = sma_params().get_kappa_l_m() * dot(dir, M) - dpsi_el_dv - therm - cS;
 
   const double absBM = abs_reg(BM, sma_params().get_fb_regularization());
   const double absBS = abs_reg(BS, sma_params().get_fb_regularization());
@@ -562,60 +616,58 @@ void Mat::BeamSMAMaterial<T>::assemble_moment_residual(const Vec7& x, const Loca
   const double FM = absBM - sma_params().get_r_m();
   const double FS = absBS - compute_rs(BS, vS);
 
-  R[0] = vM - Core::FADUtils::cast_to_double(old_state.vM) - dlamM * BM / absBM;
-  R[1] = fb(FM, dlamM, sma_params().get_fb_regularization());
-  R[2] = fb(cM0, vM, sma_params().get_fb_regularization());
-  R[3] = vS - Core::FADUtils::cast_to_double(old_state.vS) - dlamS * BS / absBS;
-  R[4] = fb(FS, dlamS, sma_params().get_fb_regularization());
-  R[5] = fb(cS0, vS, sma_params().get_fb_regularization());
-  R[6] = fb(vM + vS - 1.0, cMS, sma_params().get_fb_regularization());
+  R(0) = vM - Core::FADUtils::cast_to_double(old_state.vM) - dlamM * BM / absBM;
+  R(1) = fb(FM, dlamM, sma_params().get_fb_regularization());
+  R(2) = fb(cM0, vM, sma_params().get_fb_regularization());
+  R(3) = vS - Core::FADUtils::cast_to_double(old_state.vS) - dlamS * BS / absBS;
+  R(4) = fb(FS, dlamS, sma_params().get_fb_regularization());
+  R(5) = fb(cS0, vS, sma_params().get_fb_regularization());
+  R(6) = fb(vM + vS - 1.0, cMS, sma_params().get_fb_regularization());
 }
 
 /*-----------------------------------------------------------------------------------------------*/
 /* Local updates                                                                                 */
 /*-----------------------------------------------------------------------------------------------*/
 template <typename T>
-bool Mat::BeamSMAMaterial<T>::solve_force_state(const Vec3& Gamma, const Mat3& C_N,
-    const LocalState& old_state, LocalState& new_state, Vec3& stress) const
+bool Mat::BeamSMAMaterial<T>::solve_force_state(
+    const Vec3& Gamma, const LocalState& old_state, LocalState& new_state, Vec3& stress) const
 {
   if (sma_params().get_eps_l_n() <= 0.0)
   {
     new_state = old_state;
-    Vec3 gamma_el(Core::LinAlg::Initialization::zero);
-    for (unsigned int i = 0; i < 3; ++i) gamma_el(i) = Gamma(i);
-    stress.multiply(C_N, gamma_el);
+    Mat3 C_N(Core::LinAlg::Initialization::zero);
+    Mat3 C_M_dummy(Core::LinAlg::Initialization::zero);
+    Mat3 dC_N_dummy(Core::LinAlg::Initialization::zero);
+    Mat3 dC_M_dummy(Core::LinAlg::Initialization::zero);
+    compute_phase_constitutive_matrices(Core::FADUtils::cast_to_double(old_state.vM),
+        Core::FADUtils::cast_to_double(old_state.vS), C_N, C_M_dummy, dC_N_dummy, dC_M_dummy);
+    stress.multiply(C_N, Gamma);
     return true;
   }
 
   Vec3 dir(Core::LinAlg::Initialization::zero);
   choose_force_direction(Gamma, old_state, dir);
 
-  Vec7 Rpred{};
-  Vec7 xpred{};
-  xpred[0] = Core::FADUtils::cast_to_double(old_state.vM);
-  xpred[1] = 0.0;
-  xpred[2] = 0.0;
-  xpred[3] = Core::FADUtils::cast_to_double(old_state.vS);
-  xpred[4] = 0.0;
-  xpred[5] = 0.0;
-  xpred[6] = 0.0;
+  Vec7 Rpred(Core::LinAlg::Initialization::zero);
+  Vec7 xpred(Core::LinAlg::Initialization::zero);
+  xpred(0) = Core::FADUtils::cast_to_double(old_state.vM);
+  xpred(1) = 0.0;
+  xpred(2) = 0.0;
+  xpred(3) = Core::FADUtils::cast_to_double(old_state.vS);
+  xpred(4) = 0.0;
+  xpred(5) = 0.0;
+  xpred(6) = 0.0;
 
   Vec3 stress_pred(Core::LinAlg::Initialization::zero);
-  assemble_force_residual(xpred, old_state, Gamma, C_N, dir, Rpred, &stress_pred);
+  assemble_force_residual(xpred, old_state, Gamma, dir, Rpred, &stress_pred);
 
-  const double therm_pred = sma_params().get_delta_s_ams() *
-                                (sma_params().get_temperature() - sma_params().get_t0_sma()) +
-                            sma_params().get_w_in() * (1.0 - 2.0 * xpred[0] - 2.0 * xpred[3]);
-  const double BM_pred = -therm_pred;
-  const double BS_pred = sma_params().get_eps_l_n() * dot(dir, stress_pred) - therm_pred;
-  const double FM_pred =
-      abs_reg(BM_pred, sma_params().get_fb_regularization()) - sma_params().get_r_m();
-  const double FS_pred =
-      abs_reg(BS_pred, sma_params().get_fb_regularization()) - compute_rs(BS_pred, xpred[3]);
+  // Use the same residual quantities for the elastic predictor as in the final residual.
+  const double FM_pred = Rpred(1);
+  const double FS_pred = Rpred(4);
 
   if (FM_pred <= sma_params().get_local_newton_tol() &&
-      FS_pred <= sma_params().get_local_newton_tol() && xpred[0] >= -1.0e-12 &&
-      xpred[3] >= -1.0e-12 && xpred[0] + xpred[3] <= 1.0 + 1.0e-12)
+      FS_pred <= sma_params().get_local_newton_tol() && xpred(0) >= -1.0e-12 &&
+      xpred(3) >= -1.0e-12 && xpred(0) + xpred(3) <= 1.0 + 1.0e-12)
   {
     new_state = old_state;
     new_state.dir = dir;
@@ -623,71 +675,68 @@ bool Mat::BeamSMAMaterial<T>::solve_force_state(const Vec3& Gamma, const Mat3& C
     return true;
   }
 
-  Vec7 x{};
-  x[0] = Core::FADUtils::cast_to_double(old_state.vM);
-  x[1] = 0.0;
-  x[2] = (x[0] <= 1.0e-12 ? -1.0e-8 : 0.0);
-  x[3] = Core::FADUtils::cast_to_double(old_state.vS);
-  x[4] = 0.0;
-  x[5] = (x[3] <= 1.0e-12 ? -1.0e-8 : 0.0);
-  x[6] = (x[0] + x[3] >= 1.0 - 1.0e-12 ? 1.0e-8 : 0.0);
+  Vec7 x(Core::LinAlg::Initialization::zero);
+  x(0) = Core::FADUtils::cast_to_double(old_state.vM);
+  x(1) = 0.0;
+  x(2) = (x(0) <= 1.0e-12 ? -1.0e-8 : 0.0);
+  x(3) = Core::FADUtils::cast_to_double(old_state.vS);
+  x(4) = 0.0;
+  x(5) = (x(3) <= 1.0e-12 ? -1.0e-8 : 0.0);
+  x(6) = (x(0) + x(3) >= 1.0 - 1.0e-12 ? 1.0e-8 : 0.0);
 
   auto residual = [&](const Vec7& xin, Vec7& Rout)
-  { assemble_force_residual(xin, old_state, Gamma, C_N, dir, Rout, nullptr); };
+  { assemble_force_residual(xin, old_state, Gamma, dir, Rout, nullptr); };
 
   if (!solve_nonlinear_system(residual, x)) return false;
 
-  new_state.vM = std::max(0.0, std::min(1.0, x[0]));
-  new_state.vS = std::max(0.0, std::min(1.0, x[3]));
+  new_state.vM = std::max(0.0, std::min(1.0, x(0)));
+  new_state.vS = std::max(0.0, std::min(1.0, x(3)));
   new_state.dir = dir;
 
-  Vec7 Rfinal{};
-  assemble_force_residual(x, old_state, Gamma, C_N, dir, Rfinal, &stress);
+  Vec7 Rfinal(Core::LinAlg::Initialization::zero);
+  assemble_force_residual(x, old_state, Gamma, dir, Rfinal, &stress);
   return true;
 }
 
 template <typename T>
-bool Mat::BeamSMAMaterial<T>::solve_moment_state(const Vec3& Cur, const Mat3& C_M,
-    const LocalState& old_state, LocalState& new_state, Vec3& stress) const
+bool Mat::BeamSMAMaterial<T>::solve_moment_state(
+    const Vec3& Cur, const LocalState& old_state, LocalState& new_state, Vec3& stress) const
 {
   if (sma_params().get_kappa_l_m() <= 0.0)
   {
     new_state = old_state;
-    Vec3 kappa_el(Core::LinAlg::Initialization::zero);
-    for (unsigned int i = 0; i < 3; ++i) kappa_el(i) = Cur(i);
-    stress.multiply(C_M, kappa_el);
+    Mat3 C_N_dummy(Core::LinAlg::Initialization::zero);
+    Mat3 C_M(Core::LinAlg::Initialization::zero);
+    Mat3 dC_N_dummy(Core::LinAlg::Initialization::zero);
+    Mat3 dC_M_dummy(Core::LinAlg::Initialization::zero);
+    compute_phase_constitutive_matrices(Core::FADUtils::cast_to_double(old_state.vM),
+        Core::FADUtils::cast_to_double(old_state.vS), C_N_dummy, C_M, dC_N_dummy, dC_M_dummy);
+    stress.multiply(C_M, Cur);
     return true;
   }
 
   Vec3 dir(Core::LinAlg::Initialization::zero);
-  choose_moment_direction(Cur, C_M, old_state, dir);
+  choose_moment_direction(Cur, old_state, dir);
 
-  Vec7 xpred{};
-  xpred[0] = Core::FADUtils::cast_to_double(old_state.vM);
-  xpred[1] = 0.0;
-  xpred[2] = 0.0;
-  xpred[3] = Core::FADUtils::cast_to_double(old_state.vS);
-  xpred[4] = 0.0;
-  xpred[5] = 0.0;
-  xpred[6] = 0.0;
+  Vec7 xpred(Core::LinAlg::Initialization::zero);
+  xpred(0) = Core::FADUtils::cast_to_double(old_state.vM);
+  xpred(1) = 0.0;
+  xpred(2) = 0.0;
+  xpred(3) = Core::FADUtils::cast_to_double(old_state.vS);
+  xpred(4) = 0.0;
+  xpred(5) = 0.0;
+  xpred(6) = 0.0;
 
-  Vec7 Rpred{};
+  Vec7 Rpred(Core::LinAlg::Initialization::zero);
   Vec3 stress_pred(Core::LinAlg::Initialization::zero);
-  assemble_moment_residual(xpred, old_state, Cur, C_M, dir, Rpred, &stress_pred);
+  assemble_moment_residual(xpred, old_state, Cur, dir, Rpred, &stress_pred);
 
-  const double therm_pred = sma_params().get_delta_s_ams() *
-                                (sma_params().get_temperature() - sma_params().get_t0_sma()) +
-                            sma_params().get_w_in() * (1.0 - 2.0 * xpred[0] - 2.0 * xpred[3]);
-  const double BM_pred = -therm_pred;
-  const double BS_pred = sma_params().get_kappa_l_m() * dot(dir, stress_pred) - therm_pred;
-  const double FM_pred =
-      abs_reg(BM_pred, sma_params().get_fb_regularization()) - sma_params().get_r_m();
-  const double FS_pred =
-      abs_reg(BS_pred, sma_params().get_fb_regularization()) - compute_rs(BS_pred, xpred[3]);
+  const double FM_pred = Rpred(1);
+  const double FS_pred = Rpred(4);
 
   if (FM_pred <= sma_params().get_local_newton_tol() &&
-      FS_pred <= sma_params().get_local_newton_tol() && xpred[0] >= -1.0e-12 &&
-      xpred[3] >= -1.0e-12 && xpred[0] + xpred[3] <= 1.0 + 1.0e-12)
+      FS_pred <= sma_params().get_local_newton_tol() && xpred(0) >= -1.0e-12 &&
+      xpred(3) >= -1.0e-12 && xpred(0) + xpred(3) <= 1.0 + 1.0e-12)
   {
     new_state = old_state;
     new_state.dir = dir;
@@ -695,87 +744,97 @@ bool Mat::BeamSMAMaterial<T>::solve_moment_state(const Vec3& Cur, const Mat3& C_
     return true;
   }
 
-  Vec7 x{};
-  x[0] = Core::FADUtils::cast_to_double(old_state.vM);
-  x[1] = 0.0;
-  x[2] = (x[0] <= 1.0e-12 ? -1.0e-8 : 0.0);
-  x[3] = Core::FADUtils::cast_to_double(old_state.vS);
-  x[4] = 0.0;
-  x[5] = (x[3] <= 1.0e-12 ? -1.0e-8 : 0.0);
-  x[6] = (x[0] + x[3] >= 1.0 - 1.0e-12 ? 1.0e-8 : 0.0);
+  Vec7 x(Core::LinAlg::Initialization::zero);
+  x(0) = Core::FADUtils::cast_to_double(old_state.vM);
+  x(1) = 0.0;
+  x(2) = (x(0) <= 1.0e-12 ? -1.0e-8 : 0.0);
+  x(3) = Core::FADUtils::cast_to_double(old_state.vS);
+  x(4) = 0.0;
+  x(5) = (x(3) <= 1.0e-12 ? -1.0e-8 : 0.0);
+  x(6) = (x(0) + x(3) >= 1.0 - 1.0e-12 ? 1.0e-8 : 0.0);
 
   auto residual = [&](const Vec7& xin, Vec7& Rout)
-  { assemble_moment_residual(xin, old_state, Cur, C_M, dir, Rout, nullptr); };
+  { assemble_moment_residual(xin, old_state, Cur, dir, Rout, nullptr); };
 
   if (!solve_nonlinear_system(residual, x)) return false;
 
-  new_state.vM = std::max(0.0, std::min(1.0, x[0]));
-  new_state.vS = std::max(0.0, std::min(1.0, x[3]));
+  new_state.vM = std::max(0.0, std::min(1.0, x(0)));
+  new_state.vS = std::max(0.0, std::min(1.0, x(3)));
   new_state.dir = dir;
 
-  Vec7 Rfinal{};
-  assemble_moment_residual(x, old_state, Cur, C_M, dir, Rfinal, &stress);
+  Vec7 Rfinal(Core::LinAlg::Initialization::zero);
+  assemble_moment_residual(x, old_state, Cur, dir, Rfinal, &stress);
   return true;
 }
 
 template <typename T>
 void Mat::BeamSMAMaterial<T>::local_force_response(
-    const Vec3& Gamma, const Mat3& C_N, const unsigned int gp, Vec3& stress, Mat3& C_alg)
+    const Vec3& Gamma, const unsigned int gp, Vec3& stress, Mat3& C_alg)
 {
   const LocalState& old_state = force_state_conv_[gp];
   LocalState new_state = old_state;
 
-  if (!solve_force_state(Gamma, C_N, old_state, new_state, stress))
+  if (!solve_force_state(Gamma, old_state, new_state, stress))
     FOUR_C_THROW("Beam SMA force update failed.");
 
   force_state_new_[gp] = new_state;
 
-  C_alg.clear();
-  C_alg(1, 1) = C_N(1, 1);
-  C_alg(2, 2) = C_N(2, 2);
+  Mat3 C_N(Core::LinAlg::Initialization::zero);
+  Mat3 C_M_dummy(Core::LinAlg::Initialization::zero);
+  Mat3 dC_N_dummy(Core::LinAlg::Initialization::zero);
+  Mat3 dC_M_dummy(Core::LinAlg::Initialization::zero);
+  compute_phase_constitutive_matrices(Core::FADUtils::cast_to_double(new_state.vM),
+      Core::FADUtils::cast_to_double(new_state.vS), C_N, C_M_dummy, dC_N_dummy, dC_M_dummy);
 
-  if (sma_params().get_eps_l_n() <= 0.0)
+  if (!sma_params().use_consistent_tangent())
   {
-    C_alg(0, 0) = C_N(0, 0);
+    C_alg = C_N;
     return;
   }
 
-  const double h = 1.0e-8 * std::max(1.0, std::abs(Core::FADUtils::cast_to_double(Gamma(0))));
-  Vec3 Gp = Gamma;
-  Gp(0) += h;
+  C_alg.clear();
+  for (unsigned int j = 0; j < 3; ++j)
+  {
+    const double h = 1.0e-8 * std::max(1.0, std::abs(Core::FADUtils::cast_to_double(Gamma(j))));
+    Vec3 Gp = Gamma;
+    Gp(j) += h;
 
-  LocalState pert_state = old_state;
-  Vec3 stress_pert(Core::LinAlg::Initialization::zero);
-  if (!solve_force_state(Gp, C_N, old_state, pert_state, stress_pert))
-    FOUR_C_THROW("Beam SMA force tangent update failed.");
+    LocalState pert_state = old_state;
+    Vec3 stress_pert(Core::LinAlg::Initialization::zero);
+    if (!solve_force_state(Gp, old_state, pert_state, stress_pert))
+      FOUR_C_THROW("Beam SMA force tangent update failed.");
 
-  C_alg(0, 0) = (stress_pert(0) - stress(0)) / h;
+    for (unsigned int i = 0; i < 3; ++i) C_alg(i, j) = (stress_pert(i) - stress(i)) / h;
+  }
 }
 
 template <typename T>
 void Mat::BeamSMAMaterial<T>::local_moment_response(
-    const Vec3& Cur, const Mat3& C_M, const unsigned int gp, Vec3& stress, Mat3& C_alg)
+    const Vec3& Cur, const unsigned int gp, Vec3& stress, Mat3& C_alg)
 {
   const LocalState& old_state = moment_state_conv_[gp];
   LocalState new_state = old_state;
 
-  if (!solve_moment_state(Cur, C_M, old_state, new_state, stress))
+  if (!solve_moment_state(Cur, old_state, new_state, stress))
     FOUR_C_THROW("Beam SMA moment update failed.");
 
   moment_state_new_[gp] = new_state;
 
-  C_alg.clear();
+  Mat3 C_N_dummy(Core::LinAlg::Initialization::zero);
+  Mat3 C_M(Core::LinAlg::Initialization::zero);
+  Mat3 dC_N_dummy(Core::LinAlg::Initialization::zero);
+  Mat3 dC_M_dummy(Core::LinAlg::Initialization::zero);
+  compute_phase_constitutive_matrices(Core::FADUtils::cast_to_double(new_state.vM),
+      Core::FADUtils::cast_to_double(new_state.vS), C_N_dummy, C_M, dC_N_dummy, dC_M_dummy);
 
-  if (!sma_params().get_torsion_sma()) C_alg(0, 0) = C_M(0, 0);
-
-  if (sma_params().get_kappa_l_m() <= 0.0)
+  if (!sma_params().use_consistent_tangent())
   {
     C_alg = C_M;
     return;
   }
 
-  const int jbeg = sma_params().get_torsion_sma() ? 0 : 1;
-  for (int j = jbeg; j < 3; ++j)
+  C_alg.clear();
+  for (unsigned int j = 0; j < 3; ++j)
   {
     const double h = 1.0e-8 * std::max(1.0, std::abs(Core::FADUtils::cast_to_double(Cur(j))));
     Vec3 Cp = Cur;
@@ -783,10 +842,10 @@ void Mat::BeamSMAMaterial<T>::local_moment_response(
 
     LocalState pert_state = old_state;
     Vec3 stress_pert(Core::LinAlg::Initialization::zero);
-    if (!solve_moment_state(Cp, C_M, old_state, pert_state, stress_pert))
+    if (!solve_moment_state(Cp, old_state, pert_state, stress_pert))
       FOUR_C_THROW("Beam SMA moment tangent update failed.");
 
-    for (int i = 0; i < 3; ++i) C_alg(i, j) = (stress_pert(i) - stress(i)) / h;
+    for (unsigned int i = 0; i < 3; ++i) C_alg(i, j) = (stress_pert(i) - stress(i)) / h;
   }
 }
 
@@ -794,11 +853,32 @@ void Mat::BeamSMAMaterial<T>::local_moment_response(
 /* Interface methods                                                                             */
 /*-----------------------------------------------------------------------------------------------*/
 template <typename T>
+void Mat::BeamSMAMaterial<T>::get_constitutive_matrix_of_forces_material_frame(
+    Core::LinAlg::Matrix<3, 3, T>& C_N) const
+{
+  Mat3 C_M_dummy(Core::LinAlg::Initialization::zero);
+  Mat3 dC_N_dummy(Core::LinAlg::Initialization::zero);
+  Mat3 dC_M_dummy(Core::LinAlg::Initialization::zero);
+  compute_phase_constitutive_matrices(0.0, 0.0, C_N, C_M_dummy, dC_N_dummy, dC_M_dummy);
+}
+
+template <typename T>
+void Mat::BeamSMAMaterial<T>::get_constitutive_matrix_of_moments_material_frame(
+    Core::LinAlg::Matrix<3, 3, T>& C_M) const
+{
+  Mat3 C_N_dummy(Core::LinAlg::Initialization::zero);
+  Mat3 dC_N_dummy(Core::LinAlg::Initialization::zero);
+  Mat3 dC_M_dummy(Core::LinAlg::Initialization::zero);
+  compute_phase_constitutive_matrices(0.0, 0.0, C_N_dummy, C_M, dC_N_dummy, dC_M_dummy);
+}
+
+template <typename T>
 void Mat::BeamSMAMaterial<T>::compute_constitutive_parameter(
     Core::LinAlg::Matrix<3, 3, T>& C_N, Core::LinAlg::Matrix<3, 3, T>& C_M)
 {
-  this->BeamElastHyperMaterial<T>::get_constitutive_matrix_of_forces_material_frame(C_N);
-  this->BeamElastHyperMaterial<T>::get_constitutive_matrix_of_moments_material_frame(C_M);
+  Mat3 dC_N_dummy(Core::LinAlg::Initialization::zero);
+  Mat3 dC_M_dummy(Core::LinAlg::Initialization::zero);
+  compute_phase_constitutive_matrices(0.0, 0.0, C_N, C_M, dC_N_dummy, dC_M_dummy);
 
   for (unsigned int gp = 0; gp < numgp_force_; ++gp) c_n_alg_[gp] = C_N;
   for (unsigned int gp = 0; gp < numgp_moment_; ++gp) c_m_alg_[gp] = C_M;
@@ -806,21 +886,21 @@ void Mat::BeamSMAMaterial<T>::compute_constitutive_parameter(
 
 template <typename T>
 void Mat::BeamSMAMaterial<T>::evaluate_force_contributions_to_stress(
-    Core::LinAlg::Matrix<3, 1, T>& stressN, const Core::LinAlg::Matrix<3, 3, T>& C_N,
+    Core::LinAlg::Matrix<3, 1, T>& stressN, const Core::LinAlg::Matrix<3, 3, T>&,
     const Core::LinAlg::Matrix<3, 1, T>& Gamma, const unsigned int gp)
 {
   Mat3 C_alg(Core::LinAlg::Initialization::zero);
-  local_force_response(Gamma, C_N, gp, stressN, C_alg);
+  local_force_response(Gamma, gp, stressN, C_alg);
   c_n_alg_[gp] = C_alg;
 }
 
 template <typename T>
 void Mat::BeamSMAMaterial<T>::evaluate_moment_contributions_to_stress(
-    Core::LinAlg::Matrix<3, 1, T>& stressM, const Core::LinAlg::Matrix<3, 3, T>& C_M,
+    Core::LinAlg::Matrix<3, 1, T>& stressM, const Core::LinAlg::Matrix<3, 3, T>&,
     const Core::LinAlg::Matrix<3, 1, T>& Cur, const unsigned int gp)
 {
   Mat3 C_alg(Core::LinAlg::Initialization::zero);
-  local_moment_response(Cur, C_M, gp, stressM, C_alg);
+  local_moment_response(Cur, gp, stressM, C_alg);
   c_m_alg_[gp] = C_alg;
 }
 
@@ -838,6 +918,40 @@ void Mat::BeamSMAMaterial<T>::get_stiffness_matrix_of_moments(
     const int gp)
 {
   stiffness_matrix = c_m_alg_[gp];
+}
+
+template <typename T>
+double Mat::BeamSMAMaterial<T>::get_translational_mass_inertia_factor() const
+{
+  return sma_params().get_sma_density() * sma_params().get_sma_cross_section_area();
+}
+
+template <typename T>
+void Mat::BeamSMAMaterial<T>::get_mass_moment_of_inertia_tensor_material_frame(
+    Core::LinAlg::Matrix<3, 3>& J) const
+{
+  J.clear();
+  J(0, 0) = sma_params().get_sma_density() *
+            (sma_params().get_sma_moment_inertia2() + sma_params().get_sma_moment_inertia3());
+  J(1, 1) = sma_params().get_sma_density() * sma_params().get_sma_moment_inertia2();
+  J(2, 2) = sma_params().get_sma_density() * sma_params().get_sma_moment_inertia3();
+}
+
+template <typename T>
+void Mat::BeamSMAMaterial<T>::get_mass_moment_of_inertia_tensor_material_frame(
+    Core::LinAlg::Matrix<3, 3, Sacado::Fad::DFad<double>>& J) const
+{
+  J.clear();
+  J(0, 0) = sma_params().get_sma_density() *
+            (sma_params().get_sma_moment_inertia2() + sma_params().get_sma_moment_inertia3());
+  J(1, 1) = sma_params().get_sma_density() * sma_params().get_sma_moment_inertia2();
+  J(2, 2) = sma_params().get_sma_density() * sma_params().get_sma_moment_inertia3();
+}
+
+template <typename T>
+double Mat::BeamSMAMaterial<T>::get_interaction_radius() const
+{
+  return sma_params().get_interaction_radius();
 }
 
 template <typename T>
