@@ -3953,6 +3953,21 @@ std::unordered_map<Core::Materials::MaterialType, Core::IO::InputSpec> Global::v
                 {.description = "compute numerical algorithmic tangent by resolving the local SMA "
                                 "update; otherwise use frozen-phase elastic tangent",
                     .default_value = false}),
+            parameter<int>("LOCALSUBSTEP",
+                {.description = "maximum number of local material substeps for the SMA update",
+                    .default_value = 10}),
+
+            parameter<double>("LOCALSTRAINSTEP",
+                {.description =
+                        "maximum strain increment per local SMA force substep; 0 disables force "
+                        "substepping",
+                    .default_value = 0.0}),
+
+            parameter<double>(
+                "LOCALCURVSTEP", {.description = "maximum curvature increment per local SMA moment "
+                                                 "substep; 0 disables moment "
+                                                 "substepping",
+                                     .default_value = 0.0}),
         },
         {.description = "material parameters for a prescribed-temperature reduced Nitinol/SMA "
                         "Simo-Reissner beam material with phase-dependent stiffness based on the "

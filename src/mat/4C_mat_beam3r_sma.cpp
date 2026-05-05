@@ -50,6 +50,9 @@ Mat::PAR::BeamReissnerSMAMaterialParams::BeamReissnerSMAMaterialParams(
       rs_regularization_(matdata.parameters.get<double>("RSREG")),
       local_newton_tol_(matdata.parameters.get<double>("LOCALTOL")),
       local_newton_maxiter_(matdata.parameters.get<int>("LOCALITER")),
+      local_substep_max_(matdata.parameters.get<int>("LOCALSUBSTEP")),
+      local_substep_strain_limit_(matdata.parameters.get<double>("LOCALSTRAINSTEP")),
+      local_substep_curvature_limit_(matdata.parameters.get<double>("LOCALCURVSTEP")),
       youngs_modulus_austenite_(matdata.parameters.get<double>("YOUNG")),
       youngs_modulus_martensite_(matdata.parameters.get<double>("YOUNGMART")),
       shear_modulus_austenite_(Mat::PAR::determine_shear_modulus(matdata)),
@@ -76,6 +79,9 @@ Mat::PAR::BeamReissnerSMAMaterialParams::BeamReissnerSMAMaterialParams(
   if (rs_regularization_ <= 0.0) FOUR_C_THROW("RSREG must be positive.");
   if (local_newton_tol_ <= 0.0) FOUR_C_THROW("LOCALTOL must be positive.");
   if (local_newton_maxiter_ < 1) FOUR_C_THROW("LOCALITER must be positive.");
+  if (local_substep_max_ < 1) FOUR_C_THROW("LOCALSUBSTEP must be positive.");
+  if (local_substep_strain_limit_ < 0.0) FOUR_C_THROW("LOCALSTRAINSTEP must be non-negative.");
+  if (local_substep_curvature_limit_ < 0.0) FOUR_C_THROW("LOCALCURVSTEP must be non-negative.");
 
   if (youngs_modulus_austenite_ <= 0.0) FOUR_C_THROW("YOUNG must be positive.");
   if (youngs_modulus_martensite_ <= 0.0) FOUR_C_THROW("YOUNGMART must be positive.");
@@ -149,6 +155,18 @@ double Mat::BeamSMAMaterial<T>::vec_norm(const Vec3& v)
   return std::sqrt(Core::FADUtils::cast_to_double(v(0)) * Core::FADUtils::cast_to_double(v(0)) +
                    Core::FADUtils::cast_to_double(v(1)) * Core::FADUtils::cast_to_double(v(1)) +
                    Core::FADUtils::cast_to_double(v(2)) * Core::FADUtils::cast_to_double(v(2)));
+}
+
+template <typename T>
+double Mat::BeamSMAMaterial<T>::vector_difference_norm(const Vec3& a, const Vec3& b) const
+{
+  double n2 = 0.0;
+  for (unsigned int i = 0; i < 3; ++i)
+  {
+    const double d = Core::FADUtils::cast_to_double(a(i) - b(i));
+    n2 += d * d;
+  }
+  return std::sqrt(n2);
 }
 
 template <typename T>
@@ -233,6 +251,13 @@ void Mat::BeamSMAMaterial<T>::setup(int numgp_force, int numgp_moment)
   c_n_alg_.assign(numgp_force_, Mat3(Core::LinAlg::Initialization::zero));
   c_m_alg_.assign(numgp_moment_, Mat3(Core::LinAlg::Initialization::zero));
 
+  gamma_conv_.assign(numgp_force_, Vec3(Core::LinAlg::Initialization::zero));
+  gamma_new_.assign(numgp_force_, Vec3(Core::LinAlg::Initialization::zero));
+
+  cur_conv_.assign(numgp_moment_, Vec3(Core::LinAlg::Initialization::zero));
+  cur_new_.assign(numgp_moment_, Vec3(Core::LinAlg::Initialization::zero));
+
+
   for (unsigned int gp = 0; gp < numgp_force_; ++gp)
   {
     force_state_conv_[gp].dir.put_scalar(0.0);
@@ -263,6 +288,9 @@ void Mat::BeamSMAMaterial<T>::pack(Core::Communication::PackBuffer& data) const
 
   add_to_pack(data, numgp_force_);
   add_to_pack(data, numgp_moment_);
+
+  add_to_pack(data, gamma_conv_);
+  add_to_pack(data, cur_conv_);
 
   for (unsigned int gp = 0; gp < numgp_force_; ++gp)
   {
@@ -307,6 +335,12 @@ void Mat::BeamSMAMaterial<T>::unpack(Core::Communication::UnpackBuffer& buffer)
     extract_from_pack(buffer, moment_state_conv_[gp].dir);
     moment_state_new_[gp] = moment_state_conv_[gp];
   }
+
+  extract_from_pack(buffer, gamma_conv_);
+  extract_from_pack(buffer, cur_conv_);
+
+  gamma_new_ = gamma_conv_;
+  cur_new_ = cur_conv_;
 
   this->set_parameter(nullptr);
 
@@ -767,26 +801,33 @@ bool Mat::BeamSMAMaterial<T>::solve_moment_state(
   return true;
 }
 
+
 template <typename T>
 void Mat::BeamSMAMaterial<T>::local_force_response(
     const Vec3& Gamma, const unsigned int gp, Vec3& stress, Mat3& C_alg)
 {
-  const LocalState& old_state = force_state_conv_[gp];
-  LocalState new_state = old_state;
+  const LocalState state_start = force_state_conv_[gp];
+  const Vec3 gamma_start = gamma_conv_[gp];
 
-  if (!solve_force_state(Gamma, old_state, new_state, stress))
+  LocalState state_end = state_start;
+  int nsub = 1;
+
+  if (!integrate_force_state_substepped(gamma_start, Gamma, state_start, state_end, stress, nsub))
     FOUR_C_THROW("Beam SMA force update failed.");
 
-  force_state_new_[gp] = new_state;
+  force_state_new_[gp] = state_end;
+  gamma_new_[gp] = Gamma;
 
   Mat3 C_N(Core::LinAlg::Initialization::zero);
   Mat3 C_M_dummy(Core::LinAlg::Initialization::zero);
   Mat3 dC_N_dummy(Core::LinAlg::Initialization::zero);
   Mat3 dC_M_dummy(Core::LinAlg::Initialization::zero);
-  compute_phase_constitutive_matrices(Core::FADUtils::cast_to_double(new_state.vM),
-      Core::FADUtils::cast_to_double(new_state.vS), C_N, C_M_dummy, dC_N_dummy, dC_M_dummy);
+  compute_phase_constitutive_matrices(Core::FADUtils::cast_to_double(state_end.vM),
+      Core::FADUtils::cast_to_double(state_end.vS), C_N, C_M_dummy, dC_N_dummy, dC_M_dummy);
 
-  if (!sma_params().use_consistent_tangent())
+  // If substepping was necessary, return the frozen-phase tangent for robustness.
+  // A fully consistent tangent would need to differentiate the entire substepped integration path.
+  if (!sma_params().use_consistent_tangent() || nsub > 1)
   {
     C_alg = C_N;
     return;
@@ -796,12 +837,16 @@ void Mat::BeamSMAMaterial<T>::local_force_response(
   for (unsigned int j = 0; j < 3; ++j)
   {
     const double h = 1.0e-8 * std::max(1.0, std::abs(Core::FADUtils::cast_to_double(Gamma(j))));
+
     Vec3 Gp = Gamma;
     Gp(j) += h;
 
-    LocalState pert_state = old_state;
+    LocalState pert_state = state_start;
     Vec3 stress_pert(Core::LinAlg::Initialization::zero);
-    if (!solve_force_state(Gp, old_state, pert_state, stress_pert))
+    int nsub_pert = 1;
+
+    if (!integrate_force_state_substepped(
+            gamma_start, Gp, state_start, pert_state, stress_pert, nsub_pert))
       FOUR_C_THROW("Beam SMA force tangent update failed.");
 
     for (unsigned int i = 0; i < 3; ++i) C_alg(i, j) = (stress_pert(i) - stress(i)) / h;
@@ -809,25 +854,70 @@ void Mat::BeamSMAMaterial<T>::local_force_response(
 }
 
 template <typename T>
+bool Mat::BeamSMAMaterial<T>::integrate_force_state_substepped(const Vec3& Gamma_start,
+    const Vec3& Gamma_end, const LocalState& state_start, LocalState& state_end, Vec3& stress_end,
+    int& nsub) const
+{
+  const double dgamma_norm = vector_difference_norm(Gamma_end, Gamma_start);
+
+  nsub = 1;
+  const double limit = sma_params().get_local_substep_strain_limit();
+  if (limit > 0.0)
+  {
+    nsub = static_cast<int>(std::ceil(dgamma_norm / limit));
+    nsub = std::max(1, std::min(nsub, sma_params().get_local_substep_max()));
+  }
+
+  LocalState state_old = state_start;
+  LocalState state_new = state_start;
+  Vec3 stress_sub(Core::LinAlg::Initialization::zero);
+
+  for (int isub = 1; isub <= nsub; ++isub)
+  {
+    const double alpha = static_cast<double>(isub) / static_cast<double>(nsub);
+
+    Vec3 Gamma_sub(Core::LinAlg::Initialization::zero);
+    for (unsigned int i = 0; i < 3; ++i)
+      Gamma_sub(i) = Gamma_start(i) + alpha * (Gamma_end(i) - Gamma_start(i));
+
+    if (!solve_force_state(Gamma_sub, state_old, state_new, stress_sub))
+    {
+      FOUR_C_THROW("Beam SMA force substep update failed at substep {} of {}.", isub, nsub);
+    }
+
+    state_old = state_new;
+  }
+
+  state_end = state_new;
+  stress_end = stress_sub;
+  return true;
+}
+
+template <typename T>
 void Mat::BeamSMAMaterial<T>::local_moment_response(
     const Vec3& Cur, const unsigned int gp, Vec3& stress, Mat3& C_alg)
 {
-  const LocalState& old_state = moment_state_conv_[gp];
-  LocalState new_state = old_state;
+  const LocalState state_start = moment_state_conv_[gp];
+  const Vec3 cur_start = cur_conv_[gp];
 
-  if (!solve_moment_state(Cur, old_state, new_state, stress))
+  LocalState state_end = state_start;
+  int nsub = 1;
+
+  if (!integrate_moment_state_substepped(cur_start, Cur, state_start, state_end, stress, nsub))
     FOUR_C_THROW("Beam SMA moment update failed.");
 
-  moment_state_new_[gp] = new_state;
+  moment_state_new_[gp] = state_end;
+  cur_new_[gp] = Cur;
 
   Mat3 C_N_dummy(Core::LinAlg::Initialization::zero);
   Mat3 C_M(Core::LinAlg::Initialization::zero);
   Mat3 dC_N_dummy(Core::LinAlg::Initialization::zero);
   Mat3 dC_M_dummy(Core::LinAlg::Initialization::zero);
-  compute_phase_constitutive_matrices(Core::FADUtils::cast_to_double(new_state.vM),
-      Core::FADUtils::cast_to_double(new_state.vS), C_N_dummy, C_M, dC_N_dummy, dC_M_dummy);
+  compute_phase_constitutive_matrices(Core::FADUtils::cast_to_double(state_end.vM),
+      Core::FADUtils::cast_to_double(state_end.vS), C_N_dummy, C_M, dC_N_dummy, dC_M_dummy);
 
-  if (!sma_params().use_consistent_tangent())
+  // If substepping was necessary, return the frozen-phase tangent for robustness.
+  if (!sma_params().use_consistent_tangent() || nsub > 1)
   {
     C_alg = C_M;
     return;
@@ -837,17 +927,62 @@ void Mat::BeamSMAMaterial<T>::local_moment_response(
   for (unsigned int j = 0; j < 3; ++j)
   {
     const double h = 1.0e-8 * std::max(1.0, std::abs(Core::FADUtils::cast_to_double(Cur(j))));
+
     Vec3 Cp = Cur;
     Cp(j) += h;
 
-    LocalState pert_state = old_state;
+    LocalState pert_state = state_start;
     Vec3 stress_pert(Core::LinAlg::Initialization::zero);
-    if (!solve_moment_state(Cp, old_state, pert_state, stress_pert))
+    int nsub_pert = 1;
+
+    if (!integrate_moment_state_substepped(
+            cur_start, Cp, state_start, pert_state, stress_pert, nsub_pert))
       FOUR_C_THROW("Beam SMA moment tangent update failed.");
 
     for (unsigned int i = 0; i < 3; ++i) C_alg(i, j) = (stress_pert(i) - stress(i)) / h;
   }
 }
+
+template <typename T>
+bool Mat::BeamSMAMaterial<T>::integrate_moment_state_substepped(const Vec3& Cur_start,
+    const Vec3& Cur_end, const LocalState& state_start, LocalState& state_end, Vec3& stress_end,
+    int& nsub) const
+{
+  const double dcur_norm = vector_difference_norm(Cur_end, Cur_start);
+
+  nsub = 1;
+  const double limit = sma_params().get_local_substep_curvature_limit();
+  if (limit > 0.0)
+  {
+    nsub = static_cast<int>(std::ceil(dcur_norm / limit));
+    nsub = std::max(1, std::min(nsub, sma_params().get_local_substep_max()));
+  }
+
+  LocalState state_old = state_start;
+  LocalState state_new = state_start;
+  Vec3 stress_sub(Core::LinAlg::Initialization::zero);
+
+  for (int isub = 1; isub <= nsub; ++isub)
+  {
+    const double alpha = static_cast<double>(isub) / static_cast<double>(nsub);
+
+    Vec3 Cur_sub(Core::LinAlg::Initialization::zero);
+    for (unsigned int i = 0; i < 3; ++i)
+      Cur_sub(i) = Cur_start(i) + alpha * (Cur_end(i) - Cur_start(i));
+
+    if (!solve_moment_state(Cur_sub, state_old, state_new, stress_sub))
+    {
+      FOUR_C_THROW("Beam SMA moment substep update failed at substep {} of {}.", isub, nsub);
+    }
+
+    state_old = state_new;
+  }
+
+  state_end = state_new;
+  stress_end = stress_sub;
+  return true;
+}
+
 
 /*-----------------------------------------------------------------------------------------------*/
 /* Interface methods                                                                             */
@@ -959,6 +1094,9 @@ void Mat::BeamSMAMaterial<T>::update()
 {
   force_state_conv_ = force_state_new_;
   moment_state_conv_ = moment_state_new_;
+
+  gamma_conv_ = gamma_new_;
+  cur_conv_ = cur_new_;
 }
 
 template <typename T>
@@ -966,6 +1104,9 @@ void Mat::BeamSMAMaterial<T>::reset()
 {
   force_state_new_ = force_state_conv_;
   moment_state_new_ = moment_state_conv_;
+
+  gamma_new_ = gamma_conv_;
+  cur_new_ = cur_conv_;
 }
 
 /*-----------------------------------------------------------------------------------------------*/

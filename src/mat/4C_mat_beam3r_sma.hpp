@@ -75,6 +75,10 @@ namespace Mat
       double get_local_newton_tol() const { return local_newton_tol_; }
       int get_local_newton_maxiter() const { return local_newton_maxiter_; }
 
+      int get_local_substep_max() const { return local_substep_max_; }
+      double get_local_substep_strain_limit() const { return local_substep_strain_limit_; }
+      double get_local_substep_curvature_limit() const { return local_substep_curvature_limit_; }
+
       // Phase-dependent elastic parameters. YOUNG and either POISSONRATIO or SHEARMOD are
       // interpreted as austenite properties; YOUNGMART/SHEARMODMART are martensite properties.
       double get_youngs_modulus_austenite() const { return youngs_modulus_austenite_; }
@@ -259,6 +263,9 @@ namespace Mat
       double rs_regularization_;
       double local_newton_tol_;
       int local_newton_maxiter_;
+      int local_substep_max_;
+      double local_substep_strain_limit_;
+      double local_substep_curvature_limit_;
 
       double youngs_modulus_austenite_;
       double youngs_modulus_martensite_;
@@ -380,6 +387,7 @@ namespace Mat
     static double fb(double a, double b, double eps);
     static double vec_norm(const Vec3& v);
     static double dot(const Vec3& a, const Vec3& b);
+    double vector_difference_norm(const Vec3& a, const Vec3& b) const;
     template <typename ResidualFunc>
     void numerical_jacobian(ResidualFunc&& residual, const Vec7& x, const Vec7& R, Mat7& J) const;
 
@@ -411,6 +419,12 @@ namespace Mat
     bool solve_moment_state(
         const Vec3& Cur, const LocalState& old_state, LocalState& new_state, Vec3& stress) const;
 
+    bool integrate_force_state_substepped(const Vec3& Gamma_start, const Vec3& Gamma_end,
+        const LocalState& state_start, LocalState& state_end, Vec3& stress_end, int& nsub) const;
+
+    bool integrate_moment_state_substepped(const Vec3& Cur_start, const Vec3& Cur_end,
+        const LocalState& state_start, LocalState& state_end, Vec3& stress_end, int& nsub) const;
+
     void local_force_response(const Vec3& Gamma, const unsigned int gp, Vec3& stress, Mat3& C_alg);
 
     void local_moment_response(const Vec3& Cur, const unsigned int gp, Vec3& stress, Mat3& C_alg);
@@ -419,6 +433,13 @@ namespace Mat
     std::vector<LocalState> force_state_new_;
     std::vector<LocalState> moment_state_conv_;
     std::vector<LocalState> moment_state_new_;
+
+    std::vector<Vec3> gamma_conv_;
+    std::vector<Vec3> gamma_new_;
+
+    std::vector<Vec3> cur_conv_;
+    std::vector<Vec3> cur_new_;
+
 
     std::vector<Mat3> c_n_alg_;
     std::vector<Mat3> c_m_alg_;
