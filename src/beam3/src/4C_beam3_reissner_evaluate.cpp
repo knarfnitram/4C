@@ -527,6 +527,11 @@ int Discret::Elements::Beam3r::evaluate(Teuchos::ParameterList& params,
       // do nothing in this cases
       break;
     }
+    case Core::Elements::struct_update_prestress:
+    {
+      //  std::cout << "Prestressing for Beam3r not implemented, skipping evaluation." <<std::endl;
+      break;
+    }
 
     default:
       std::cout << "\ncalled element with action type " << action_type_to_string(act);

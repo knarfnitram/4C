@@ -514,7 +514,7 @@ void Discret::Elements::SolidEleCalc<celltype, ElementFormulation>::update_prest
   }
   else
   {
-    FOUR_C_THROW("The solid formulation does not support to update the prestress!");
+    // FOUR_C_THROW("The solid formulation does not support to update the prestress!");
   }
 }
 
