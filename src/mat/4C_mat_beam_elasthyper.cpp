@@ -125,7 +125,6 @@ void Mat::BeamElastHyperMaterial<T>::unpack(Core::Communication::UnpackBuffer& b
       if (mat->type() == Core::Materials::m_beam_reissner_elast_hyper or
           mat->type() == Core::Materials::m_beam_reissner_elast_hyper_bymodes or
           mat->type() == Core::Materials::m_beam_kirchhoff_elast_hyper or
-          mat->type() == Core::Materials::m_beam_reissner_sma or
           mat->type() == Core::Materials::m_beam_reissner_elast_plastic or
           mat->type() == Core::Materials::m_beam_kirchhoff_elast_hyper_bymodes or
           mat->type() == Core::Materials::m_beam_kirchhoff_torsionfree_elast_hyper or

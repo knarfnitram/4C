@@ -14,6 +14,7 @@
 #include "4C_io_input_spec_validators.hpp"
 #include "4C_linalg_tensor_generators.hpp"
 #include "4C_linalg_utils_densematrix_funct.hpp"
+#include "4C_mat_beam3r_sma.hpp"
 #include "4C_mat_electrode.hpp"
 #include "4C_mat_fiber_interpolation.hpp"
 #include "4C_mat_fluidporo_singlephase.hpp"
@@ -3868,10 +3869,9 @@ std::unordered_map<Core::Materials::MaterialType, Core::IO::InputSpec> Global::v
                                 "evaluate interactions such as contact, potentials, ...",
                     .default_value = -1.0}),
 
-            // Prescribed-temperature reduced SMA model parameters
-            parameter<double>("TEMP",
-                {.description = "constant fallback material temperature used if no temperature "
-                                "function is prescribed"}),
+            // SMA model parameters. All energy-like parameters (DSAMS, WIN, RM, RSF0, RSR0, HSF,
+            // HSR, CTS, ASF0, ASF1, ASR0, ASR1) are given per unit volume, i.e. in stress units.
+            parameter<double>("TEMP", {.description = "constant material temperature"}),
 
             parameter<double>("DSAMS",
                 {.description = "entropy difference between austenite and martensite phases"}),
@@ -3917,55 +3917,66 @@ std::unordered_map<Core::Materials::MaterialType, Core::IO::InputSpec> Global::v
                                 "0 < NEXP <= 1"}),
 
             parameter<double>(
-                "EPSLN", {.description = "maximum axial transformation strain amplitude",
+                "EPSLN", {.description = "maximum uniaxial transformation strain; used for the "
+                                         "axial force and by the fibre model",
                              .default_value = 0.0}),
 
-            parameter<double>(
-                "KAPPALM", {.description = "maximum bending transformation curvature amplitude",
-                               .default_value = 0.0}),
+            parameter<Mat::PAR::BeamReissnerSMAMaterialParams::MomentModel>("MOMENTMODEL",
+                {.description =
+                        "model for bending and torsion: 'elastic' (no transformation), "
+                        "'sectional' (one state per cross-section with transformation curvature "
+                        "KAPPALM) or 'fibers' (material law integrated over fibres of a solid "
+                        "circular cross-section with axial and torsional shear strains)",
+                    .default_value =
+                        Mat::PAR::BeamReissnerSMAMaterialParams::MomentModel::elastic}),
+
+            parameter<int>("NUMFIBERRINGS",
+                {.description = "MOMENTMODEL fibers: number of Gauss points in radial direction",
+                    .default_value = 6}),
+
+            parameter<int>("NUMFIBERSECTORS",
+                {.description = "MOMENTMODEL fibers: number of equidistant sectors in "
+                                "circumferential direction",
+                    .default_value = 16}),
+
+            parameter<double>("KAPPALM",
+                {.description = "MOMENTMODEL sectional: maximum transformation curvature",
+                    .default_value = 0.0}),
 
             parameter<bool>("TORSIONSMA",
-                {.description = "activate SMA transformation also for torsional curvature",
+                {.description = "MOMENTMODEL sectional: include the torsional curvature in the "
+                                "transformation",
                     .default_value = false}),
 
-            // Local Newton / regularization parameters
-            parameter<double>("FBREG",
-                {.description =
-                        "regularization parameter for Fischer-Burmeister complementarity functions",
-                    .default_value = 1.0e-10}),
-
+            // Local update parameters
             parameter<double>("RSREG",
                 {.description =
                         "regularization parameter for the transformation-radius powers near "
                         "vS = 0 and vS = 1",
                     .default_value = 1.0e-8}),
 
-            parameter<double>("LOCALTOL",
-                {.description = "local Newton tolerance for the SMA phase-fraction solve",
-                    .default_value = 1.0e-10}),
-
-            parameter<int>("LOCALITER",
-                {.description = "maximum number of local Newton iterations for the SMA "
-                                "phase-fraction solve",
-                    .default_value = 50}),
+            parameter<int>(
+                "LOCALITER", {.description = "maximum number of staggered iterations between the "
+                                             "multiple- and single-variant martensite fractions",
+                                 .default_value = 50}),
 
             parameter<bool>("CONSISTENTTANGENT",
-                {.description = "compute numerical algorithmic tangent by resolving the local SMA "
-                                "update; otherwise use frozen-phase elastic tangent",
-                    .default_value = false}),
+                {.description = "use the analytic consistent tangent of the local SMA update; "
+                                "otherwise use the frozen-phase elastic tangent",
+                    .default_value = true}),
             parameter<int>("LOCALSUBSTEP",
                 {.description = "maximum number of local material substeps for the SMA update",
                     .default_value = 10}),
 
             parameter<double>("LOCALSTRAINSTEP",
                 {.description =
-                        "maximum strain increment per local SMA force substep; 0 disables force "
-                        "substepping",
+                        "maximum strain increment per local SMA substep of the axial state and "
+                        "of the fibres; 0 disables substepping",
                     .default_value = 0.0}),
 
             parameter<double>(
-                "LOCALCURVSTEP", {.description = "maximum curvature increment per local SMA moment "
-                                                 "substep; 0 disables moment "
+                "LOCALCURVSTEP", {.description = "MOMENTMODEL sectional: maximum curvature "
+                                                 "increment per local SMA substep; 0 disables "
                                                  "substepping",
                                      .default_value = 0.0}),
         },
