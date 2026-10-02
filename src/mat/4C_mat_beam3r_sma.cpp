@@ -547,6 +547,11 @@ void Mat::BeamSMAMaterial<T>::evaluate_driving_forces(
     df.dB_dq[idx_m](k) = -P(k);
     df.dstress_dv[idx_s](k) = P(k) - kappa * Cd(k);
     df.dstress_dv[idx_m](k) = P(k);
+
+    // derivatives w.r.t. the transformation direction
+    df.dB_dd[idx_s](k) = kappa * df.stress(k) - kappa * kappa * vS * Cd(k) + kappa * vS * P(k);
+    df.dB_dd[idx_m](k) = kappa * vS * P(k);
+    for (unsigned int l = 0; l < 3; ++l) df.dstress_dd(k, l) = -kappa * vS * C(k, l);
   }
 }
 
@@ -838,6 +843,52 @@ void Mat::BeamSMAMaterial<T>::choose_direction(
   }
 }
 
+template <typename T>
+bool Mat::BeamSMAMaterial<T>::direction_derivative(
+    Mode mode, const Vec3& q, const LocalState& old_state, const Vec3& dir, Mat3& ddir_dq) const
+{
+  ddir_dq.clear();
+
+  if (Core::FADUtils::cast_to_double(old_state.vS) > direction_reset_tolerance_) return false;
+
+  // the axial direction is the sign of the trial force and thus piecewise constant
+  if (mode == Mode::force) return true;
+
+  // d = W s / sqrt(s^T W s) with the trial stress s = C (q - kappa vS_old d_old)
+  double W[3] = {1.0, 3.0, 3.0};
+  if (mode == Mode::moment)
+  {
+    W[0] = sma_params().get_torsion_sma() ? 1.0 : 0.0;
+    W[1] = 1.0;
+    W[2] = 1.0;
+  }
+
+  Mat3 C, dC, d2C;
+  compute_phase_constitutive_matrices(
+      Core::FADUtils::cast_to_double(old_state.vM + old_state.vS), mode, C, dC, d2C);
+
+  const double kappa = transformation_amplitude(mode);
+  Vec3 q_el;
+  for (unsigned int k = 0; k < 3; ++k) q_el(k) = q(k) - kappa * old_state.vS * old_state.dir(k);
+  Vec3 s_trial;
+  s_trial.multiply(C, q_el);
+
+  double norm = 0.0;
+  for (unsigned int k = 0; k < 3; ++k) norm += W[k] * s_trial(k) * s_trial(k);
+  norm = std::sqrt(norm);
+  if (norm <= 1.0e-14) return true;
+
+  // dd/dq = (W - d d^T) C / norm
+  for (unsigned int k = 0; k < 3; ++k)
+    for (unsigned int l = 0; l < 3; ++l)
+    {
+      double value = W[k] * C(k, l);
+      for (unsigned int m = 0; m < 3; ++m) value -= dir(k) * dir(m) * C(m, l);
+      ddir_dq(k, l) = value / norm;
+    }
+  return true;
+}
+
 /*-----------------------------------------------------------------------------------------------*/
 /* Local updates                                                                                 */
 /*-----------------------------------------------------------------------------------------------*/
@@ -856,8 +907,9 @@ void Mat::BeamSMAMaterial<T>::integrate_local_state(Mode mode, const Vec3& q_sta
         static_cast<unsigned int>(std::max(1, std::min(n, sma_params().get_local_substep_max())));
   }
 
-  // D[i] = d v_i / d q_end, carried through all substeps (exact chain rule)
+  // D[i] = d v_i / d q_end and D_dir = d dir / d q_end, carried through all substeps
   Vec3 D[2];
+  Mat3 D_dir;
 
   LocalState state = state_start;
   DrivingForces df;
@@ -871,6 +923,13 @@ void Mat::BeamSMAMaterial<T>::integrate_local_state(Mode mode, const Vec3& q_sta
 
     Vec3 dir;
     choose_direction(mode, q, state, dir);
+
+    Mat3 ddir_dq;
+    if (direction_derivative(mode, q, state, dir, ddir_dq))
+    {
+      D_dir = ddir_dq;
+      D_dir.scale(alpha);
+    }
 
     LocalState state_new;
     Transformation status[2];
@@ -915,6 +974,7 @@ void Mat::BeamSMAMaterial<T>::integrate_local_state(Mode mode, const Vec3& q_sta
           rhs[i](k) = alpha * df.dB_dq[i](k);
           for (unsigned int j = 0; j < 2; ++j)
             if (!active[j]) rhs[i](k) += df.dB_dv[i][j] * D_new[j](k);
+          for (unsigned int l = 0; l < 3; ++l) rhs[i](k) += df.dB_dd[i](l) * D_dir(l, k);
         }
       }
 
@@ -953,10 +1013,13 @@ void Mat::BeamSMAMaterial<T>::integrate_local_state(Mode mode, const Vec3& q_sta
   C_alg = C;
   if (!sma_params().use_consistent_tangent()) return;
 
-  // consistent tangent: dstress/dq = C + sum_i dstress/dv_i (x) dv_i/dq
+  // consistent tangent: dstress/dq = C + sum_i dstress/dv_i (x) dv_i/dq + dstress/ddir ddir/dq
   for (unsigned int i = 0; i < 2; ++i)
     for (unsigned int k = 0; k < 3; ++k)
       for (unsigned int l = 0; l < 3; ++l) C_alg(k, l) += df.dstress_dv[i](k) * D[i](l);
+  for (unsigned int k = 0; k < 3; ++k)
+    for (unsigned int l = 0; l < 3; ++l)
+      for (unsigned int m = 0; m < 3; ++m) C_alg(k, l) += df.dstress_dd(k, m) * D_dir(m, l);
 }
 
 template <typename T>

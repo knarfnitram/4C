@@ -416,8 +416,10 @@ namespace Mat
       double B[2] = {0.0, 0.0};
       double dB_dv[2][2] = {{0.0, 0.0}, {0.0, 0.0}};
       Vec3 dB_dq[2];
+      Vec3 dB_dd[2];
       Vec3 stress;
       Vec3 dstress_dv[2];
+      Mat3 dstress_dd;
     };
 
     static constexpr unsigned int idx_s = 0;
@@ -479,6 +481,11 @@ namespace Mat
     void choose_moment_direction(const Vec3& Cur, const LocalState& old_state, Vec3& dir) const;
     void choose_fiber_direction(const Vec3& e, const LocalState& old_state, Vec3& dir) const;
     void choose_direction(Mode mode, const Vec3& q, const LocalState& old_state, Vec3& dir) const;
+
+    //! derivative of the transformation direction w.r.t. q if it is chosen from the trial stress
+    //! in this (sub)step; returns false if the direction of the old state is kept
+    bool direction_derivative(Mode mode, const Vec3& q, const LocalState& old_state,
+        const Vec3& dir, Mat3& ddir_dq) const;
 
     //! (substepped) local update from q_start to q_end including the consistent tangent
     void integrate_local_state(Mode mode, const Vec3& q_start, const Vec3& q_end,
