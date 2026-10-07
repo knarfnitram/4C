@@ -68,14 +68,25 @@ void Solid::Predict::Generic::predict(::NOX::Abstract::Group& grp)
   bool& ispredict = gstate_ptr_->is_predict();
   ispredict = true;
 
-  // pre-process the prediction step
-  pre_predict(grp);
+  try
+  {
+    // pre-process the prediction step
+    pre_predict(grp);
 
-  // compute the actual prediction step
-  compute(grp);
+    // compute the actual prediction step
+    compute(grp);
 
-  // post-process the prediction step
-  post_predict(grp);
+    // post-process the prediction step
+    post_predict(grp);
+  }
+  catch (...)
+  {
+    // Leave the predictor in a consistent state if the evaluation of a state failed. Some errors
+    // (Solid::RecoverableEvaluationError) are handled by the time integration by retrying the step.
+    ispredict = false;
+    implint_ptr_->set_is_predictor_state(false);
+    throw;
+  }
 
   ispredict = false;
 }

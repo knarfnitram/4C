@@ -84,7 +84,16 @@ void Solid::Predict::TangDis::compute(::NOX::Abstract::Group& grp)
   // Dirichlet boundary conditions.
   // ---------------------------------------------------------------------------
   apply_linear_reaction_forces_ = true;
-  grp_ptr->compute_f_and_jacobian();
+  try
+  {
+    grp_ptr->compute_f_and_jacobian();
+  }
+  catch (...)
+  {
+    apply_linear_reaction_forces_ = false;
+    impl_int().eval_data().set_predictor_type(Solid::pred_vague);
+    throw;
+  }
   apply_linear_reaction_forces_ = false;
 
   // ---------------------------------------------------------------------------

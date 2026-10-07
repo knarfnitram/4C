@@ -43,6 +43,7 @@
 #include "4C_linalg_fevector.hpp"
 #include "4C_linalg_fixedsizematrix.hpp"
 #include "4C_rigidsphere.hpp"
+#include "4C_structure_new_recoverable_evaluation_error.hpp"
 #include "4C_structure_new_timint_basedataglobalstate.hpp"
 #include "4C_structure_new_timint_basedataio.hpp"
 #include "4C_utils_exceptions.hpp"
@@ -387,6 +388,8 @@ bool BeamInteraction::SubmodelEvaluator::BeamContact::evaluate_force()
         beam_contact_params_ptr_->beam_to_solid_volume_meshtying_params());
   }
 
+  throw_if_evaluation_failed();
+
   return true;
 }
 
@@ -405,6 +408,8 @@ bool BeamInteraction::SubmodelEvaluator::BeamContact::evaluate_stiff()
         nullptr, beam_interaction_data_state_ptr()->get_stiff(),
         beam_contact_params_ptr_->beam_to_solid_volume_meshtying_params());
   }
+
+  throw_if_evaluation_failed();
 
   return true;
 }
@@ -427,7 +432,24 @@ bool BeamInteraction::SubmodelEvaluator::BeamContact::evaluate_force_stiff()
 
   print_active_beam_contact_set(Core::IO::cout.os(Core::IO::debug));
 
+  throw_if_evaluation_failed();
+
   return true;
+}
+
+/*----------------------------------------------------------------------*
+ *----------------------------------------------------------------------*/
+void BeamInteraction::SubmodelEvaluator::BeamContact::throw_if_evaluation_failed() const
+{
+  int local_evaluation_failed = 0;
+  for (const auto& assembly_manager : assembly_managers_)
+    if (assembly_manager->evaluation_failed()) local_evaluation_failed = 1;
+
+  // All ranks have to throw the error, since it is caught by the time integration, which continues
+  // with collective operations.
+  if (Core::Communication::max_all(local_evaluation_failed, discret().get_comm()) > 0)
+    throw Solid::RecoverableEvaluationError(
+        "The evaluation of at least one beam contact pair failed for the current configuration.");
 }
 
 /*----------------------------------------------------------------------*

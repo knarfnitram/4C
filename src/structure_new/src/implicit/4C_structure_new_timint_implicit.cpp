@@ -22,6 +22,7 @@
 #include "4C_structure_new_nln_solver_generic.hpp"
 #include "4C_structure_new_predict_factory.hpp"
 #include "4C_structure_new_predict_generic.hpp"
+#include "4C_structure_new_recoverable_evaluation_error.hpp"
 #include "4C_structure_new_timint_base.hpp"
 #include "4C_structure_new_timint_noxinterface.hpp"
 #include "4C_structure_new_utils.hpp"
@@ -109,7 +110,19 @@ void Solid::TimeInt::Implicit::prepare_time_step()
   check_init_setup();
 
   ::NOX::Abstract::Group& grp = nln_solver().get_solution_group();
-  predictor().predict(grp);
+
+  predictor_failed_ = false;
+  try
+  {
+    predictor().predict(grp);
+  }
+  catch (const Solid::RecoverableEvaluationError& error)
+  {
+    // The error is thrown on all ranks. The step is treated as a failed nonlinear solve in solve().
+    if (data_global_state().get_my_rank() == 0)
+      std::cout << "Evaluation of the predicted state failed:\n" << error.what() << "\n";
+    predictor_failed_ = true;
+  }
 }
 
 /*----------------------------------------------------------------------------*
@@ -129,6 +142,7 @@ void Solid::TimeInt::Implicit::integrate_step()
   check_init_setup();
   // do the predictor step
   ::NOX::Abstract::Group& grp = nln_solver().get_solution_group();
+  predictor_failed_ = false;
   predictor().predict(grp);
   const auto solve_status = solve();
   FOUR_C_ASSERT_ALWAYS(solve_status == Solid::StepStatus::no_errors, "Nonlinear solve failed.");
@@ -139,6 +153,9 @@ void Solid::TimeInt::Implicit::integrate_step()
 Solid::StepStatus Solid::TimeInt::Implicit::solve()
 {
   check_init_setup();
+
+  // The evaluation of the predicted state already failed, so the step is treated as failed.
+  if (predictor_failed_) return Solid::StepStatus::nonlinear_solver_failed;
 
   throw_if_state_not_in_sync_with_nox_group();
   // reset the non-linear solver

@@ -224,6 +224,10 @@ namespace Solid
 
       //! Nonlinear iteration counts from the recent accepted steps used for time-step recovery.
       std::deque<size_t> number_of_nonlinear_iterations_per_step_;
+
+      //! Flag if the evaluation of the predicted state failed in the current step (see
+      //! Solid::RecoverableEvaluationError).
+      bool predictor_failed_ = false;
     };
   }  // namespace TimeInt
 }  // namespace Solid

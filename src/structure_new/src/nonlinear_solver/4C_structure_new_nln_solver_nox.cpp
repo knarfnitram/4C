@@ -15,6 +15,7 @@
 #include "4C_solver_nonlin_nox_problem.hpp"
 #include "4C_solver_nonlin_nox_scaling.hpp"
 #include "4C_solver_nonlin_nox_solver_factory.hpp"
+#include "4C_structure_new_recoverable_evaluation_error.hpp"
 #include "4C_structure_new_timint_base.hpp"
 #include "4C_structure_new_timint_noxinterface.hpp"
 #include "4C_structure_new_utils.hpp"
@@ -22,6 +23,8 @@
 #include <NOX_Abstract_Group.H>
 #include <NOX_Solver_Generic.H>
 #include <Teuchos_RCPStdSharedPtrConversions.hpp>
+
+#include <iostream>
 
 FOUR_C_NAMESPACE_OPEN
 
@@ -199,7 +202,19 @@ Solid::StepStatus Solid::Nln::SOLVER::Nox::solve()
 #endif
 
   // solve the non-linear step
-  ::NOX::StatusTest::StatusType finalstatus = nlnsolver_->solve();
+  ::NOX::StatusTest::StatusType finalstatus = ::NOX::StatusTest::Unconverged;
+  try
+  {
+    finalstatus = nlnsolver_->solve();
+  }
+  catch (const Solid::RecoverableEvaluationError& error)
+  {
+    // The error is thrown on all ranks. The current step is treated as a failed nonlinear solve.
+    if (data_global_state().get_my_rank() == 0)
+      std::cout << "Evaluation of the current state failed during the nonlinear solve:\n"
+                << error.what() << "\n";
+    return Solid::StepStatus::nonlinear_solver_failed;
+  }
 
   return convert_final_status(finalstatus);
 }

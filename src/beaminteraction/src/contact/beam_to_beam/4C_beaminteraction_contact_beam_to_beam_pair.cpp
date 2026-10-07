@@ -25,14 +25,35 @@
 #include "4C_linalg_serialdensematrix.hpp"
 #include "4C_linalg_serialdensevector.hpp"
 #include "4C_linalg_utils_sparse_algebra_math.hpp"
+#include "4C_structure_new_recoverable_evaluation_error.hpp"
 #include "4C_structure_timint_impl.hpp"
 #include "4C_utils_exceptions.hpp"
 
 #include <Teuchos_TimeMonitor.hpp>
 
+#include <algorithm>
+#include <array>
+#include <format>
 #include <memory>
+#include <utility>
 
 FOUR_C_NAMESPACE_OPEN
+
+namespace
+{
+  /**
+   * \brief Throw an error indicating that the contact evaluation of the current state failed.
+   *
+   * In contrast to FOUR_C_THROW, this error can be handled by the time integration, e.g., by a
+   * reduction of the time step size. It is used for failures that depend on the current
+   * configuration (e.g. strongly distorted Newton iterates) and not on the input.
+   */
+  template <typename... Args>
+  [[noreturn]] void throw_recoverable_contact_error(std::format_string<Args...> fmt, Args&&... args)
+  {
+    throw Solid::RecoverableEvaluationError(std::format(fmt, std::forward<Args>(args)...));
+  }
+}  // namespace
 
 // TODO: Abfangen, dass Kontaktpunkte am Elementuebergang zweimal ausgewertet werden!!!
 
@@ -243,6 +264,10 @@ bool BeamInteraction::BeamToBeamContactPair<numnodes, numnodalvalues>::evaluate(
   clear_class_variables();
 
   double pp = params()->beam_to_beam_contact_params()->beam_to_beam_point_penalty_param();
+
+  // Skip element pairs that are too far apart for any close segments to be found. This avoids the
+  // segmentation of (possibly strongly deformed) elements that can not be in contact anyway.
+  if (elements_too_far_apart_for_contact()) return false;
 
   // Subdevide the two elements in segments with linear approximation
   std::vector<Core::LinAlg::Matrix<3, 1, double>> endpoints1;
@@ -1571,6 +1596,7 @@ double BeamInteraction::BeamToBeamContactPair<numnodes, numnodalvalues>::create_
   Core::LinAlg::Matrix<3, 1, double> r2(Core::LinAlg::Initialization::zero);
   Core::LinAlg::Matrix<3, 1, double> t2(Core::LinAlg::Initialization::zero);
   Core::LinAlg::Matrix<3, 1, double> rm(Core::LinAlg::Initialization::zero);
+  Core::LinAlg::Matrix<3, 1, double> tm(Core::LinAlg::Initialization::zero);
   double l = 0.0;
   double segdist = 0.0;
   double maxsegdist = 0.0;
@@ -1585,9 +1611,10 @@ double BeamInteraction::BeamToBeamContactPair<numnodes, numnodalvalues>::create_
     for (int i = 0; i < numsegment; i++)
     {
       if (numsegment > (int)MAXNUMSEG)
-        FOUR_C_THROW(
-            "Not more segments than MAXNUMSEG per element possible! Increase MAXNUMSEG or apply "
-            "finer discretization!");
+        throw_recoverable_contact_error(
+            "Not more segments than MAXNUMSEG per element possible (element {})! Check for "
+            "extremely deformed beam elements, increase MAXNUMSEG or apply finer discretization!",
+            ele->id());
 
       xi1 = 0.0;
       xi2 = 0.0;
@@ -1606,6 +1633,8 @@ double BeamInteraction::BeamToBeamContactPair<numnodes, numnodalvalues>::create_
       t2 = Core::FADUtils::cast_to_double<TYPE, 3, 1>(auxmatrix);
       auxmatrix = r((xi1 + xi2) / 2.0, ele);
       rm = Core::FADUtils::cast_to_double<TYPE, 3, 1>(auxmatrix);
+      auxmatrix = r_xi((xi1 + xi2) / 2.0, ele);
+      tm = Core::FADUtils::cast_to_double<TYPE, 3, 1>(auxmatrix);
 
       endpoints[i] = r1;
       endpoints[i + 1] = r2;
@@ -1614,7 +1643,7 @@ double BeamInteraction::BeamToBeamContactPair<numnodes, numnodalvalues>::create_
       segdist = 1.0 * l / 2.0 * std::tan(segangle);
 
       if (segdist > maxsegdist) maxsegdist = segdist;
-      if (!check_segment(r1, t1, r2, t2, rm, segdist)) moresegments = true;
+      if (!check_segment(r1, t1, r2, t2, rm, tm, segdist)) moresegments = true;
     }
 
     deltaxi = deltaxi / 2;
@@ -1691,13 +1720,90 @@ double BeamInteraction::BeamToBeamContactPair<numnodes, numnodalvalues>::get_max
 }
 
 /*----------------------------------------------------------------------*
+ *----------------------------------------------------------------------*/
+template <unsigned int numnodes, unsigned int numnodalvalues>
+bool BeamInteraction::BeamToBeamContactPair<numnodes,
+    numnodalvalues>::elements_too_far_apart_for_contact()
+{
+  // The control points span the convex hull of the centerline only for linear Lagrange and cubic
+  // Hermite elements.
+  if constexpr (numnodes != 2) return false;
+
+  const double segangle = params()->beam_to_beam_contact_params()->segmentation_angle();
+
+  // Get the axis-aligned bounding box of the centerline control points of an element.
+  auto get_bounding_box = [&](const Core::Elements::Element* ele)
+  {
+    std::vector<Core::LinAlg::Matrix<3, 1, double>> control_points;
+    const auto r_left = Core::FADUtils::cast_to_double<TYPE, 3, 1>(r(-1.0, ele));
+    const auto r_right = Core::FADUtils::cast_to_double<TYPE, 3, 1>(r(1.0, ele));
+    control_points.push_back(r_left);
+    control_points.push_back(r_right);
+    if constexpr (numnodalvalues == 2)
+    {
+      // inner Bezier control points of the cubic Hermite curve with xi in [-1, 1]
+      Core::LinAlg::Matrix<3, 1, double> b_left(r_left);
+      b_left.update(2.0 / 3.0, Core::FADUtils::cast_to_double<TYPE, 3, 1>(r_xi(-1.0, ele)), 1.0);
+      Core::LinAlg::Matrix<3, 1, double> b_right(r_right);
+      b_right.update(-2.0 / 3.0, Core::FADUtils::cast_to_double<TYPE, 3, 1>(r_xi(1.0, ele)), 1.0);
+      control_points.push_back(b_left);
+      control_points.push_back(b_right);
+    }
+
+    std::array<double, 3> min_coords{
+        control_points[0](0), control_points[0](1), control_points[0](2)};
+    std::array<double, 3> max_coords = min_coords;
+    for (const auto& point : control_points)
+    {
+      for (unsigned int dim = 0; dim < 3; dim++)
+      {
+        min_coords[dim] = std::min(min_coords[dim], point(dim));
+        max_coords[dim] = std::max(max_coords[dim], point(dim));
+      }
+    }
+    return std::make_pair(min_coords, max_coords);
+  };
+
+  const auto [min_1, max_1] = get_bounding_box(element1());
+  const auto [min_2, max_2] = get_bounding_box(element2());
+
+  double box_distance_squared = 0.0;
+  double diagonal_squared_1 = 0.0;
+  double diagonal_squared_2 = 0.0;
+  for (unsigned int dim = 0; dim < 3; dim++)
+  {
+    const double gap = std::max({0.0, min_2[dim] - max_1[dim], min_1[dim] - max_2[dim]});
+    box_distance_squared += gap * gap;
+    diagonal_squared_1 += (max_1[dim] - min_1[dim]) * (max_1[dim] - min_1[dim]);
+    diagonal_squared_2 += (max_2[dim] - min_2[dim]) * (max_2[dim] - min_2[dim]);
+  }
+  const double diagonal_1 = std::sqrt(diagonal_squared_1);
+  const double diagonal_2 = std::sqrt(diagonal_squared_2);
+
+  // Upper bounds for the maximal segment distances maxsegdist1_ and maxsegdist2_, since the length
+  // of each segment is smaller than the diagonal of the bounding box.
+  const double maxsegdist_bound_1 = 0.5 * diagonal_1 * std::tan(segangle);
+  const double maxsegdist_bound_2 = 0.5 * diagonal_2 * std::tan(segangle);
+
+  // Upper bound for the distance limit used in get_close_segments() (with the same safety factor).
+  const double distancelimit =
+      1.1 * (maxsegdist_bound_1 + maxsegdist_bound_2 + maxactivegap_ + r1_ + r2_);
+
+  // In the intersection check of parallel segments, the cylinders are extended in axial direction
+  // by distancelimit times half of the segment length.
+  const double search_distance = distancelimit * (1.0 + 0.5 * std::max(diagonal_1, diagonal_2));
+
+  return box_distance_squared > search_distance * search_distance;
+}
+
+/*----------------------------------------------------------------------*
  |  Check, if segments are fine enough                       meier 10/14|
  *----------------------------------------------------------------------*/
 template <unsigned int numnodes, unsigned int numnodalvalues>
 bool BeamInteraction::BeamToBeamContactPair<numnodes, numnodalvalues>::check_segment(
     Core::LinAlg::Matrix<3, 1, double>& r1, Core::LinAlg::Matrix<3, 1, double>& t1,
     Core::LinAlg::Matrix<3, 1, double>& r2, Core::LinAlg::Matrix<3, 1, double>& t2,
-    Core::LinAlg::Matrix<3, 1, double>& rm, double& segdist)
+    Core::LinAlg::Matrix<3, 1, double>& rm, Core::LinAlg::Matrix<3, 1, double>& tm, double& segdist)
 {
   Core::LinAlg::Matrix<3, 1, double> t_lin(Core::LinAlg::Initialization::zero);
   Core::LinAlg::Matrix<3, 1, double> rm_lin(Core::LinAlg::Initialization::zero);
@@ -1719,31 +1825,28 @@ bool BeamInteraction::BeamToBeamContactPair<numnodes, numnodalvalues>::check_seg
   angle1 = (double)BeamInteraction::calc_angle(t1, t_lin);
   angle2 = (double)BeamInteraction::calc_angle(t2, t_lin);
 
-  if (std::fabs(angle1) < segangle and
-      std::fabs(angle2) < segangle)  // segment distribution is fine enough
-  {
-    if (std::fabs(dist) > segdist)
-    {
-      this->print(std::cout);
+  // the end tangents deviate too much from the linear approximation -> we need more segments
+  if (std::fabs(angle1) >= segangle or std::fabs(angle2) >= segangle) return false;
 
-      std::cout << "\n\nangle_left= " << angle1 / std::numbers::pi * 180
-                << "degrees, angle_right= " << angle2 / std::numbers::pi * 180
-                << "degrees, segangle= " << segangle / std::numbers::pi * 180 << "degrees";
-      std::cout << "\n\nsegment midpoint position (linear approx)= " << rm_lin;
-      std::cout << "\n\nsegment midpoint position                = " << rm;
-      std::cout << "\n\ndist= " << dist << ", segdist= " << segdist;
+  // segment distribution is fine enough
+  if (std::fabs(dist) <= segdist) return true;
 
-      FOUR_C_THROW(
-          "Segmentation in beam contact search (step 2/2, i.e. 'fine' search) failed!\n"
-          "Maximal spatial extension of this segment cannot be approximated by a double cone!\n"
-          "Check for extremely deformed beam elements and try to avoid this.\n"
-          "Increase value of BEAMS_SEGANGLE ?!");
-    }
+  // The midpoint of the segment deviates from the midpoint of the linear approximation, even though
+  // the end tangents are within the segmentation angle. This happens for straight (or slightly
+  // curved) segments with a non-uniform parametrization, e.g., in non-uniformly stretched beam
+  // elements, where the midpoint is mainly shifted along the segment axis. For the double cone
+  // approximation, only the lateral deviation from the segment axis is relevant. A shift along the
+  // axis is admissible, as long as the centerline does not reverse its direction within the
+  // segment. Therefore, we additionally check that all tangents point in the direction of the
+  // segment and that the tangent at the midpoint is also within the segmentation angle. If this is
+  // not the case, a finer segmentation is required.
+  const double t_lin_norm = Core::FADUtils::vector_norm<3>(t_lin);
+  const double axial_dist = diffvec.dot(t_lin) / t_lin_norm;
+  const double lateral_dist = std::sqrt(std::max(dist * dist - axial_dist * axial_dist, 0.0));
+  const bool tangents_aligned = t1.dot(t_lin) > 0.0 and t2.dot(t_lin) > 0.0 and tm.dot(t_lin) > 0.0;
+  const double angle_m = BeamInteraction::calc_angle(tm, t_lin);
 
-    return true;
-  }
-  else  // we still need more segments
-    return false;
+  return tangents_aligned and std::fabs(angle_m) < segangle and lateral_dist <= segdist;
 }
 
 /*----------------------------------------------------------------------*
@@ -1990,7 +2093,8 @@ bool BeamInteraction::BeamToBeamContactPair<numnodes, numnodalvalues>::closest_p
       double norm_delta_r = Core::FADUtils::vector_norm<3>(delta_r);
 
       if (norm_delta_r < std::numeric_limits<double>::min())
-        FOUR_C_THROW("Norm of delta_r is too small. Aborting to avoid division by 0.");
+        throw_recoverable_contact_error(
+            "Norm of delta_r is too small. Aborting to avoid division by 0.");
 
       // calculate unit normal
       Core::LinAlg::Matrix<3, 1, TYPE> normal(Core::LinAlg::Initialization::zero);
@@ -2039,7 +2143,7 @@ bool BeamInteraction::BeamToBeamContactPair<numnodes, numnodalvalues>::closest_p
             Core::FADUtils::cast_to_double(Core::FADUtils::norm(eta2)) <= 1.0)
         {
           this->print(std::cout);
-          FOUR_C_THROW("Beam axis identical, choose smaller time step!");
+          throw_recoverable_contact_error("Beam axis identical, choose smaller time step!");
         }
         else
         {
@@ -2280,7 +2384,8 @@ bool BeamInteraction::BeamToBeamContactPair<numnodes, numnodalvalues>::closest_p
 
         if (Core::FADUtils::cast_to_double(Core::FADUtils::vector_norm<3>(r1_xi)) < 1.0e-8 or
             Core::FADUtils::cast_to_double(Core::FADUtils::vector_norm<3>(r2_xi)) < 1.0e-8)
-          FOUR_C_THROW("Tangent vector of zero length, choose smaller time step!");
+          throw_recoverable_contact_error(
+              "Tangent vector of zero length, choose smaller time step!");
 
         double angle =
             fabs(BeamInteraction::calc_angle(Core::FADUtils::cast_to_double<TYPE, 3, 1>(r1_xi),
@@ -2295,7 +2400,7 @@ bool BeamInteraction::BeamToBeamContactPair<numnodes, numnodalvalues>::closest_p
         // Newton scheme should find it with the first starting point. Otherwise, the problem may be
         // ill-conditioned!
         if (validpairfound and numstartpoint != 0)
-          FOUR_C_THROW(
+          throw_recoverable_contact_error(
               "Valid CCP solution has not been found with the first starting point. Choose smaller "
               "value of SEGANGLE!");
 
@@ -2473,7 +2578,7 @@ bool BeamInteraction::BeamToBeamContactPair<numnodes, numnodalvalues>::point_to_
                 Core::FADUtils::cast_to_double(Core::FADUtils::norm(eta2)) <
             NEIGHBORTOL)
         {
-          FOUR_C_THROW("Beam axis identical, choose smaller time step!");
+          throw_recoverable_contact_error("Beam axis identical, choose smaller time step!");
         }
       }
 
@@ -2546,7 +2651,7 @@ bool BeamInteraction::BeamToBeamContactPair<numnodes, numnodalvalues>::point_to_
           df, delta_r, norm_delta_r, r1_xi, r2_xi, r2_xixi, orthogonalprojection);
 
       if (!validlinearization)
-        FOUR_C_THROW(
+        throw_recoverable_contact_error(
             "Linearization of point to line projection is zero, choose tighter search boxes!");
 
 #ifdef FADCHECKS
@@ -2581,7 +2686,7 @@ bool BeamInteraction::BeamToBeamContactPair<numnodes, numnodalvalues>::point_to_
 
       // TODO:
       this->print(std::cout);
-      FOUR_C_THROW(
+      throw_recoverable_contact_error(
           "Local Newton loop unconverged. Adapt segangle or the shift angles for small-angle "
           "contact!");
 
@@ -2631,13 +2736,14 @@ bool BeamInteraction::BeamToBeamContactPair<numnodes, numnodalvalues>::point_to_
           if (throw_error)
           {
             this->print(std::cout);
-            FOUR_C_THROW("eta2=-1, danger of multiple gauss point evaluation!");
+            throw_recoverable_contact_error("eta2=-1, danger of multiple gauss point evaluation!");
           }
         }
 
         if (Core::FADUtils::cast_to_double(Core::FADUtils::vector_norm<3>(r1_xi)) < 1.0e-8 or
             Core::FADUtils::cast_to_double(Core::FADUtils::vector_norm<3>(r2_xi)) < 1.0e-8)
-          FOUR_C_THROW("Tangent vector of zero length, choose smaller time step!");
+          throw_recoverable_contact_error(
+              "Tangent vector of zero length, choose smaller time step!");
 
         bool relevant_angle = true;
         double angle =
@@ -2658,7 +2764,7 @@ bool BeamInteraction::BeamToBeamContactPair<numnodes, numnodalvalues>::point_to_
         // Newton scheme should find it with the first starting point. Otherwise, the problem may be
         // ill-conditioned!
         if (pairactive and numstartpoint != 0)
-          FOUR_C_THROW(
+          throw_recoverable_contact_error(
               "Valid Point-To-Line solution has not been found with the first starting point. "
               "Choose smaller value of SEGANGLE!");
 
@@ -2778,7 +2884,7 @@ void BeamInteraction::BeamToBeamContactPair<numnodes,
       if (gap < g_min)
       {
         if (cp_at_right_neighbor)
-          FOUR_C_THROW(
+          throw_recoverable_contact_error(
               "This should not happen, that we have a local minimum on the right and on the left "
               "neighbor!");
 
@@ -3465,7 +3571,7 @@ void BeamInteraction::BeamToBeamContactPair<numnodes, numnodalvalues>::compute_l
   // invert L by hand
   TYPE det_L = L(0, 0) * L(1, 1) - L(0, 1) * L(1, 0);
   if (Core::FADUtils::cast_to_double(Core::FADUtils::norm(det_L)) < DETERMINANTTOL)
-    FOUR_C_THROW("ERROR: determinant of L = 0");
+    throw_recoverable_contact_error("ERROR: determinant of L = 0");
   L_inv(0, 0) = L(1, 1) / det_L;
   L_inv(0, 1) = -L(0, 1) / det_L;
   L_inv(1, 0) = -L(1, 0) / det_L;
@@ -3532,7 +3638,8 @@ void BeamInteraction::BeamToBeamContactPair<numnodes, numnodalvalues>::compute_l
   //  std::cout << "r2_xixi: " << r2_xixi << std::endl;
 
   if (fabs(Core::FADUtils::cast_to_double(L)) < COLLINEARTOL)
-    FOUR_C_THROW("Linearization of point to line projection is zero, choose tighter search boxes!");
+    throw_recoverable_contact_error(
+        "Linearization of point to line projection is zero, choose tighter search boxes!");
 
   for (unsigned int i = 0; i < 3; i++)
   {
@@ -3586,7 +3693,8 @@ void BeamInteraction::BeamToBeamContactPair<numnodes, numnodalvalues>::compute_l
       Core::FADUtils::scalar_product(delta_r, r1_xixi);
 
   if (fabs(Core::FADUtils::cast_to_double(L)) < COLLINEARTOL)
-    FOUR_C_THROW("Linearization of point to line projection is zero, choose tighter search boxes!");
+    throw_recoverable_contact_error(
+        "Linearization of point to line projection is zero, choose tighter search boxes!");
 
   for (unsigned int i = 0; i < 3; i++)
   {
@@ -4299,7 +4407,7 @@ void BeamInteraction::BeamToBeamContactPair<numnodes, numnodalvalues>::compute_n
   TYPE norm_delta_r = Core::FADUtils::vector_norm<3>(delta_r);
 
   if (Core::FADUtils::cast_to_double(norm_delta_r) < NORMTOL)
-    FOUR_C_THROW("ERROR: Normal of length zero! --> change time step!");
+    throw_recoverable_contact_error("ERROR: Normal of length zero! --> change time step!");
 
   // unit normal
   Core::LinAlg::Matrix<3, 1, TYPE> normal(Core::LinAlg::Initialization::zero);
@@ -4330,7 +4438,8 @@ void BeamInteraction::BeamToBeamContactPair<numnodes, numnodalvalues>::compute_n
 
     if (Core::FADUtils::cast_to_double(Core::FADUtils::norm(scalar_product_of_normals)) <
         std::numeric_limits<double>::epsilon())
-      FOUR_C_THROW("ERROR: The old normal and the current normal are orthogonal on each other!");
+      throw_recoverable_contact_error(
+          "ERROR: The old normal and the current normal are orthogonal on each other!");
 
     gap = Core::FADUtils::signum(scalar_product_of_normals) * norm_delta_r - r1_ - r2_;
 
@@ -4351,7 +4460,7 @@ void BeamInteraction::BeamToBeamContactPair<numnodes, numnodalvalues>::compute_n
       not params()->beam_to_beam_contact_params()->use_new_gap_function())
   {
     this->print(std::cout);
-    FOUR_C_THROW(
+    throw_recoverable_contact_error(
         "Gap too small, danger of penetration. Choose smaller time step, higher penalty value"
         "or consider activating the enhanced gap calculation (BEAMS_NEWGAP).");
   }

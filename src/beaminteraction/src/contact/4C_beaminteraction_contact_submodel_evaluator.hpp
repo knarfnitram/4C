@@ -84,6 +84,12 @@ namespace BeamInteraction
        */
       void pre_evaluate();
 
+      /**
+       * \brief Throw a Solid::RecoverableEvaluationError on all ranks, if the evaluation of a pair
+       * failed on any rank.
+       */
+      void throw_if_evaluation_failed() const;
+
       //! derived
       void update_step_state(const double& timefac_n) override;
 

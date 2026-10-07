@@ -86,6 +86,17 @@ namespace BeamInteraction
       {
         return 0.0;
       }
+
+      /**
+       * \brief Return true, if the evaluation of at least one pair failed on this rank during the
+       * last call to evaluate_force_stiff with a recoverable error (see
+       * Solid::RecoverableEvaluationError).
+       */
+      [[nodiscard]] bool evaluation_failed() const { return evaluation_failed_; }
+
+     protected:
+      //! Flag if the evaluation of a pair failed with a recoverable error on this rank.
+      bool evaluation_failed_ = false;
     };
 
   }  // namespace SubmodelEvaluator

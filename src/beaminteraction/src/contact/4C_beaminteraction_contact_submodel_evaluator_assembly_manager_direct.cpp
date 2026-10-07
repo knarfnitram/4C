@@ -10,9 +10,14 @@
 #include "4C_beaminteraction_calc_utils.hpp"
 #include "4C_beaminteraction_contact_pair.hpp"
 #include "4C_beaminteraction_str_model_evaluator_datastate.hpp"
+#include "4C_comm_mpi_utils.hpp"
+#include "4C_fem_discretization.hpp"
 #include "4C_fem_general_element.hpp"
 #include "4C_linalg_serialdensematrix.hpp"
 #include "4C_linalg_serialdensevector.hpp"
+#include "4C_structure_new_recoverable_evaluation_error.hpp"
+
+#include <iostream>
 
 FOUR_C_NAMESPACE_OPEN
 
@@ -61,13 +66,29 @@ void BeamInteraction::SubmodelEvaluator::BeamContactAssemblyManagerDirect::evalu
   // are non-zero stiffness values returned which need assembly?
   bool pair_is_active = false;
 
+  evaluation_failed_ = false;
+
   for (auto& elepairptr : assembly_contact_elepairs_)
   {
-    // Evaluate the pair and check if there is active contact
-    pair_is_active =
-        elepairptr->evaluate(&(eleforce_centerlineDOFs[0]), &(eleforce_centerlineDOFs[1]),
-            &(elestiff_centerlineDOFs[0][0]), &(elestiff_centerlineDOFs[0][1]),
-            &(elestiff_centerlineDOFs[1][0]), &(elestiff_centerlineDOFs[1][1]));
+    // Evaluate the pair and check if there is active contact. If the evaluation of the pair fails
+    // for the current state, the failure is only stored here, since it has to be communicated to
+    // all ranks before the evaluation can be aborted (see BeamContact).
+    try
+    {
+      pair_is_active =
+          elepairptr->evaluate(&(eleforce_centerlineDOFs[0]), &(eleforce_centerlineDOFs[1]),
+              &(elestiff_centerlineDOFs[0][0]), &(elestiff_centerlineDOFs[0][1]),
+              &(elestiff_centerlineDOFs[1][0]), &(elestiff_centerlineDOFs[1][1]));
+    }
+    catch (const Solid::RecoverableEvaluationError& error)
+    {
+      std::cout << "Rank " << Core::Communication::my_mpi_rank(discret->get_comm())
+                << ": Evaluation of beam contact pair (element IDs " << elepairptr->element1()->id()
+                << " & " << elepairptr->element2()->id() << ") failed:\n"
+                << error.what() << "\n";
+      evaluation_failed_ = true;
+      break;
+    }
 
     if (pair_is_active)
     {

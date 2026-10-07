@@ -306,12 +306,29 @@ namespace BeamInteraction
     double get_max_active_dist();
 
     /*!
+    \brief Check if the two elements are so far apart that the contact search can not find any
+    close segments
+
+    The check is based on axis-aligned bounding boxes, which contain the convex hull of the control
+    points of the centerline curves (Bezier control points for cubic Hermite elements, nodes for
+    linear elements). The distance limit is chosen such that all element pairs that are skipped by
+    this check would also not result in any close segment pairs in get_close_segments(). This
+    allows to skip the segmentation of strongly deformed elements, that can not be in contact
+    anyway. For other element types, false is returned.
+    */
+    bool elements_too_far_apart_for_contact();
+
+    /*!
     \brief Check, if segments are fine enough
+
+    Returns true, if the centerline segment between r1 and r2 (with tangents t1 and t2, midpoint rm
+    and midpoint tangent tm) can be approximated by a straight line, i.e., if it lies within a
+    double cone around the line. Returns false, if a finer segmentation is required.
     */
     bool check_segment(Core::LinAlg::Matrix<3, 1, double>& r1,
         Core::LinAlg::Matrix<3, 1, double>& t1, Core::LinAlg::Matrix<3, 1, double>& r2,
         Core::LinAlg::Matrix<3, 1, double>& t2, Core::LinAlg::Matrix<3, 1, double>& rm,
-        double& segdist);
+        Core::LinAlg::Matrix<3, 1, double>& tm, double& segdist);
 
     /*!
     \brief Calculate scalar contact force

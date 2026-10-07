@@ -42,6 +42,7 @@
 #include "4C_rigidsphere.hpp"
 #include "4C_solid_ele.hpp"
 #include "4C_structure_new_model_evaluator_data.hpp"
+#include "4C_structure_new_recoverable_evaluation_error.hpp"
 #include "4C_structure_new_timint_base.hpp"
 #include "4C_structure_new_utils.hpp"
 #include "4C_utils_exceptions.hpp"
@@ -754,9 +755,18 @@ void Solid::ModelEvaluator::BeamInteractionModelEvaluator::evaluate_force()
 {
   check_init_setup();
 
-  Vector::iterator some_iter;
-  for (some_iter = me_vec_ptr_->begin(); some_iter != me_vec_ptr_->end(); ++some_iter)
-    (*some_iter)->evaluate_force();
+  try
+  {
+    for (auto& submodel : *me_vec_ptr_) submodel->evaluate_force();
+  }
+  catch (const Solid::RecoverableEvaluationError&)
+  {
+    // The error is thrown on all ranks (see Solid::RecoverableEvaluationError). Complete the
+    // global FE objects before passing it on, so that no contributions to non-local entries remain
+    // in the FE objects for the next evaluation.
+    ia_state_ptr_->get_force_np()->complete();
+    throw;
+  }
 
   // do communication
   ia_state_ptr_->get_force_np()->complete();
@@ -775,9 +785,18 @@ void Solid::ModelEvaluator::BeamInteractionModelEvaluator::evaluate_stiff()
 
   ia_state_ptr_->get_stiff()->un_complete();
 
-  Vector::iterator some_iter;
-  for (some_iter = me_vec_ptr_->begin(); some_iter != me_vec_ptr_->end(); ++some_iter)
-    (*some_iter)->evaluate_stiff();
+  try
+  {
+    for (auto& submodel : *me_vec_ptr_) submodel->evaluate_stiff();
+  }
+  catch (const Solid::RecoverableEvaluationError&)
+  {
+    // The error is thrown on all ranks (see Solid::RecoverableEvaluationError). Complete the
+    // global FE objects before passing it on, so that no contributions to non-local entries remain
+    // in the FE objects for the next evaluation.
+    if (not ia_state_ptr_->get_stiff()->filled()) ia_state_ptr_->get_stiff()->complete();
+    throw;
+  }
 
   if (not ia_state_ptr_->get_stiff()->filled()) ia_state_ptr_->get_stiff()->complete();
 
@@ -794,9 +813,19 @@ void Solid::ModelEvaluator::BeamInteractionModelEvaluator::evaluate_force_stiff(
 
   ia_state_ptr_->get_stiff()->un_complete();
 
-  Vector::iterator some_iter;
-  for (some_iter = me_vec_ptr_->begin(); some_iter != me_vec_ptr_->end(); ++some_iter)
-    (*some_iter)->evaluate_force_stiff();
+  try
+  {
+    for (auto& submodel : *me_vec_ptr_) submodel->evaluate_force_stiff();
+  }
+  catch (const Solid::RecoverableEvaluationError&)
+  {
+    // The error is thrown on all ranks (see Solid::RecoverableEvaluationError). Complete the
+    // global FE objects before passing it on, so that no contributions to non-local entries remain
+    // in the FE objects for the next evaluation.
+    ia_state_ptr_->get_force_np()->complete();
+    if (not ia_state_ptr_->get_stiff()->filled()) ia_state_ptr_->get_stiff()->complete();
+    throw;
+  }
 
   // do communication
   ia_state_ptr_->get_force_np()->complete();
