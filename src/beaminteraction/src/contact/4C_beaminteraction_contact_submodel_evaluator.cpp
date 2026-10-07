@@ -367,6 +367,9 @@ void BeamInteraction::SubmodelEvaluator::BeamContact::reset()
     // update rotational Dof values in the interaction pair object
     elepairptr->reset_rotation_state(
         discret(), beam_interaction_data_state_ptr()->get_dis_col_np());
+
+    // time of the current configuration for time-dependent pair parameters
+    elepairptr->set_time(g_state().get_time_np());
   }
 
   // Set restart displacements in the pairs.

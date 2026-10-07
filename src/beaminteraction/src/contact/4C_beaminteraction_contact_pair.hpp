@@ -86,6 +86,12 @@ namespace BeamInteraction
     //! Setup
     virtual void setup();
 
+    /*!
+    \brief Set the time at which time-dependent parameters (e.g., penalty parameters defined by a
+    function of time) are evaluated. This has to be the time of the current configuration.
+    */
+    void set_time(const double time) { time_ = time; }
+
     //@}
 
     /*!
