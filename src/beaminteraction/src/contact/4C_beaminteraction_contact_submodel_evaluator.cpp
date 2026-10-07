@@ -51,6 +51,10 @@
 #include <NOX_Solver_Generic.H>
 #include <Teuchos_TimeMonitor.hpp>
 
+#include <map>
+#include <numbers>
+#include <queue>
+
 FOUR_C_NAMESPACE_OPEN
 
 /*----------------------------------------------------------------------------*
@@ -1048,11 +1052,75 @@ void BeamInteraction::SubmodelEvaluator::BeamContact::
           if ((*either)->node_ids()[i] == currele->node_ids()[j]) toerase = true;
     }
 
+    // 4) ensure that elements of the same beam that are too close to each other along the
+    //    centerline do not get into contact
+    if (not toerase and is_physically_impossible_self_contact(currele, *either)) toerase = true;
+
     if (toerase)
       neighbors.erase(either++);
     else
       ++either;
   }
+}
+
+/*----------------------------------------------------------------------------*
+ *----------------------------------------------------------------------------*/
+bool BeamInteraction::SubmodelEvaluator::BeamContact::is_physically_impossible_self_contact(
+    const Core::Elements::Element* element_1, const Core::Elements::Element* element_2) const
+{
+  const auto* beam_1 = dynamic_cast<const Discret::Elements::Beam3Base*>(element_1);
+  const auto* beam_2 = dynamic_cast<const Discret::Elements::Beam3Base*>(element_2);
+  if (beam_1 == nullptr or beam_2 == nullptr) return false;
+
+  // The bending radius of a beam can not be smaller than its cross-section radius r. Therefore,
+  // two points of the same beam can only be in contact, if their distance along the centerline is
+  // at least pi * r (half circle with radius r). For points closer to each other along the
+  // centerline, the contact is spurious, e.g., in a straight beam with elements shorter than the
+  // beam diameter.
+  const double max_arc_length = 0.5 * std::numbers::pi *
+                                (beam_1->get_circular_cross_section_radius_for_interactions() +
+                                    beam_2->get_circular_cross_section_radius_for_interactions());
+
+  // Search the elements of the same beam (connected via nodes) with a distance along the
+  // centerline (sum of the reference lengths of the elements in between) smaller than
+  // max_arc_length, starting from element 1. Only elements available on this rank are considered.
+  std::map<int, double> arc_length_to_element{{element_1->id(), 0.0}};
+  std::queue<const Core::Elements::Element*> elements_to_visit;
+  elements_to_visit.push(element_1);
+  while (not elements_to_visit.empty())
+  {
+    const Core::Elements::Element* element = elements_to_visit.front();
+    elements_to_visit.pop();
+
+    // arc length from element 1 to the elements adjacent to this element
+    double arc_length_to_adjacent_elements = 0.0;
+    if (element != element_1)
+      arc_length_to_adjacent_elements =
+          arc_length_to_element.at(element->id()) +
+          dynamic_cast<const Discret::Elements::Beam3Base*>(element)->ref_length();
+    if (arc_length_to_adjacent_elements >= max_arc_length) continue;
+
+    for (int i_node = 0; i_node < element->num_node(); ++i_node)
+    {
+      for (const auto& adjacent_element_ref : element->nodes()[i_node]->adjacent_elements())
+      {
+        const Core::Elements::Element* adjacent_element = adjacent_element_ref.user_element();
+        if (dynamic_cast<const Discret::Elements::Beam3Base*>(adjacent_element) == nullptr)
+          continue;
+
+        if (adjacent_element->id() == element_2->id()) return true;
+
+        auto it = arc_length_to_element.find(adjacent_element->id());
+        if (it == arc_length_to_element.end() or it->second > arc_length_to_adjacent_elements)
+        {
+          arc_length_to_element[adjacent_element->id()] = arc_length_to_adjacent_elements;
+          elements_to_visit.push(adjacent_element);
+        }
+      }
+    }
+  }
+
+  return false;
 }
 
 /*----------------------------------------------------------------------------*

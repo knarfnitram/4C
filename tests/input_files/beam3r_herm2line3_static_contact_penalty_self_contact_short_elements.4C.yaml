@@ -1,0 +1,113 @@
+TITLE:
+  - "Single beam with beam-to-beam contact of the beam with itself. The elements are shorter than the
+    beam diameter, such that elements i and i+2 are within contact distance, although the beam is straight.
+    Element pairs of the same beam that are closer along the centerline than the minimal arc length for
+    a physical self-contact must not be evaluated. The result has to be identical to the one without contact."
+PROBLEM TYPE:
+  PROBLEMTYPE: "Structure"
+STRUCTURAL DYNAMIC:
+  DYNAMICTYPE: "Statics"
+  TIMESTEP: 0.5
+  NUMSTEP: 2
+  MAXTIME: 1
+  TOLRES: 1e-08
+  TOLDISP: 1e-08
+  PREDICT: "TangDis"
+  LINEAR_SOLVER: 1
+SOLVER 1:
+  SOLVER: "UMFPACK"
+  NAME: "Structure_Solver"
+BEAM INTERACTION/BEAM TO BEAM CONTACT:
+  BEAMS_NEWGAP: true
+  BEAMS_SEGCON: true
+  BEAMS_BTBPENALTYPARAM: 1000
+  BEAMS_BTBLINEPENALTYPARAM: 1000
+  BEAMS_PERPSHIFTANGLE1: 20
+  BEAMS_PERPSHIFTANGLE2: 30
+  BEAMS_PARSHIFTANGLE1: 20
+  BEAMS_PARSHIFTANGLE2: 30
+  BEAMS_SEGANGLE: 2
+  BEAMS_NUMINTEGRATIONINTERVAL: 10
+BEAM INTERACTION/BEAM TO BEAM CONTACT CONDITIONS:
+  - E: 1
+    COUPLING_ID: 1
+  - E: 1
+    COUPLING_ID: 1
+BINNING STRATEGY:
+  BIN_SIZE_LOWER_BOUND: 0.5
+  DOMAINBOUNDINGBOX: "-0.5 -0.5 -0.5 1.0 0.5 0.5"
+DESIGN POINT DIRICH CONDITIONS:
+  - E: 1
+    NUMDOF: 9
+    ONOFF: [1, 1, 1, 1, 1, 1, 0, 0, 0]
+    VAL: [0, 0, 0, 0, 0, 0, 0, 0, 0]
+    FUNCT: [0, 0, 0, 0, 0, 0, 0, 0, 0]
+  - E: 2
+    NUMDOF: 9
+    ONOFF: [1, 1, 1, 0, 0, 0, 0, 0, 0]
+    VAL: [0, 0, 0.1, 0, 0, 0, 0, 0, 0]
+    FUNCT: [0, 0, 1, 0, 0, 0, 0, 0, 0]
+DNODE-NODE TOPOLOGY:
+  - "NODE 1 DNODE 1"
+  - "NODE 7 DNODE 2"
+DLINE-NODE TOPOLOGY:
+  - "NODE 1 DLINE 1"
+  - "NODE 2 DLINE 1"
+  - "NODE 3 DLINE 1"
+  - "NODE 4 DLINE 1"
+  - "NODE 5 DLINE 1"
+  - "NODE 6 DLINE 1"
+  - "NODE 7 DLINE 1"
+  - "NODE 8 DLINE 1"
+  - "NODE 9 DLINE 1"
+  - "NODE 10 DLINE 1"
+  - "NODE 11 DLINE 1"
+  - "NODE 12 DLINE 1"
+  - "NODE 13 DLINE 1"
+NODE COORDS:
+  - "NODE 1 COORD 0.0 0.0 0.0"
+  - "NODE 2 COORD 0.08 0.0 0.0"
+  - "NODE 3 COORD 0.16 0.0 0.0"
+  - "NODE 4 COORD 0.24 0.0 0.0"
+  - "NODE 5 COORD 0.32 0.0 0.0"
+  - "NODE 6 COORD 0.4 0.0 0.0"
+  - "NODE 7 COORD 0.48 0.0 0.0"
+  - "NODE 8 COORD 0.04 0.0 0.0"
+  - "NODE 9 COORD 0.12 0.0 0.0"
+  - "NODE 10 COORD 0.2 0.0 0.0"
+  - "NODE 11 COORD 0.28 0.0 0.0"
+  - "NODE 12 COORD 0.36 0.0 0.0"
+  - "NODE 13 COORD 0.44 0.0 0.0"
+STRUCTURE ELEMENTS:
+  - "1 BEAM3R LINE3 1 2 8 MAT 1 TRIADS 0 0 0 0 0 0 0 0 0 HERMITE_CENTERLINE true"
+  - "2 BEAM3R LINE3 2 3 9 MAT 1 TRIADS 0 0 0 0 0 0 0 0 0 HERMITE_CENTERLINE true"
+  - "3 BEAM3R LINE3 3 4 10 MAT 1 TRIADS 0 0 0 0 0 0 0 0 0 HERMITE_CENTERLINE true"
+  - "4 BEAM3R LINE3 4 5 11 MAT 1 TRIADS 0 0 0 0 0 0 0 0 0 HERMITE_CENTERLINE true"
+  - "5 BEAM3R LINE3 5 6 12 MAT 1 TRIADS 0 0 0 0 0 0 0 0 0 HERMITE_CENTERLINE true"
+  - "6 BEAM3R LINE3 6 7 13 MAT 1 TRIADS 0 0 0 0 0 0 0 0 0 HERMITE_CENTERLINE true"
+MATERIALS:
+  - MAT: 1
+    MAT_BeamReissnerElastHyper:
+      YOUNG: 100000
+      POISSONRATIO: 0.3
+      DENS: 0
+      CROSSAREA: 0.007853981633974483
+      SHEARCORR: 1
+      MOMINPOL: 9.817477042468104e-06
+      MOMIN2: 4.908738521234052e-06
+      MOMIN3: 4.908738521234052e-06
+FUNCT1:
+  - SYMBOLIC_FUNCTION_OF_SPACE_TIME: "t"
+RESULT DESCRIPTION:
+  - STRUCTURE:
+      DIS: "structure"
+      NODE: 3
+      QUANTITY: "dispz"
+      VALUE: 0.019533540121964999
+      TOLERANCE: 1e-10
+  - STRUCTURE:
+      DIS: "structure"
+      NODE: 4
+      QUANTITY: "dispz"
+      VALUE: 0.036969903388699064
+      TOLERANCE: 1e-10

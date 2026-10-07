@@ -292,10 +292,24 @@ namespace BeamInteraction
        *   thus only beam-to-beam pairs where the GID of the first element is smaller than the
        *   second are considered
        * - elements sharing nodes don't interact
+       * - elements of the same beam that are too close to each other along the centerline don't
+       *   interact (see is_physically_impossible_self_contact())
        */
       void select_eles_to_be_considered_for_contact_evaluation(
           const Core::Elements::Element* currele,
           std::set<Core::Elements::Element*>& neighbors) const;
+
+      /**
+       * \brief Check if two beam elements belong to the same beam and are so close to each other
+       * along the centerline (in the reference configuration) that a physical contact is not
+       * possible.
+       *
+       * Since the bending radius of a beam can not be smaller than its cross-section radius, two
+       * points of the same beam can only be in contact if their distance along the centerline is at
+       * least pi/2 * (r_1 + r_2). Returns false for elements that are not beam elements.
+       */
+      bool is_physically_impossible_self_contact(
+          const Core::Elements::Element* element_1, const Core::Elements::Element* element_2) const;
 
       /**
        * create instances of class BeamContactPair that will be evaluated
