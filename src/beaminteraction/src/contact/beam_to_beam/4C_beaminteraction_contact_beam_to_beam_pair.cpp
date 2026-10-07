@@ -61,7 +61,8 @@ namespace
  *----------------------------------------------------------------------------*/
 template <unsigned int numnodes, unsigned int numnodalvalues>
 BeamInteraction::BeamToBeamContactPair<numnodes, numnodalvalues>::BeamToBeamContactPair(
-    std::shared_ptr<std::map<ElementIDKey, Core::LinAlg::Matrix<3, 1, double>>> old_cp_normals)
+    std::shared_ptr<const ContactNormalMap> old_cp_normals,
+    std::shared_ptr<ContactNormalMap> current_cp_normals)
     : BeamContactPair(),
       r1_(0.0),
       r2_(0.0),
@@ -72,7 +73,8 @@ BeamInteraction::BeamToBeamContactPair<numnodes, numnodalvalues>::BeamToBeamCont
       numseg2_(1),
       boundarynode1_(std::make_pair(0, 0)),
       boundarynode2_(std::make_pair(0, 0)),
-      old_cp_normals_(old_cp_normals)
+      old_cp_normals_(old_cp_normals),
+      current_cp_normals_(current_cp_normals)
 {
   // empty constructor
 }
@@ -263,6 +265,12 @@ bool BeamInteraction::BeamToBeamContactPair<numnodes, numnodalvalues>::evaluate(
   // since most of the elements leave directly after the closest point projection!
   clear_class_variables();
 
+  // Remove the contact normal of the previous evaluation of this pair. It is stored again at the
+  // end of this evaluation, if a closest point is found.
+  if (current_cp_normals_ != nullptr)
+    current_cp_normals_->erase(ElementIDKey{element1()->id(), element2()->id()});
+  closest_point_normal_.reset();
+
   double pp = params()->beam_to_beam_contact_params()->beam_to_beam_point_penalty_param();
 
   // Skip element pairs that are too far apart for any close segments to be found. This avoids the
@@ -355,22 +363,27 @@ bool BeamInteraction::BeamToBeamContactPair<numnodes, numnodalvalues>::evaluate(
     }
   }
 
-  if (params()->beam_to_beam_contact_params()->use_new_gap_function())
+  if (params()->beam_to_beam_contact_params()->use_new_gap_function() and
+      current_cp_normals_ != nullptr)
   {
-    // loop over every cp variable
-    for (auto& cpvariable : cpvariables_)
+    // Store the normal (oriented consistently with the reference normal) of the current
+    // configuration. If the current configuration is accepted, it becomes the reference normal for
+    // the next time step (see BeamToBeamContactCondition::clear()). The normal of an active contact
+    // point is used, otherwise the normal at the closest point found in the closest point
+    // projection (if any). Thereby, also pairs that are close but not yet in contact have a
+    // reference normal.
+    ElementIDKey key{element1()->id(), element2()->id()};
+    if (!cpvariables_.empty())
     {
-      // create key and normal
-      ElementIDKey key{(element1()->id()), (element2()->id())};
       Core::LinAlg::Matrix<3, 1, double> normal;
-      auto sign = cpvariable->get_sign();
-
-      // get normal with correct sign for next iteration
+      const double sign = cpvariables_.back()->get_sign();
       for (int i = 0; i < 3; ++i)
-        normal(i) = sign * Core::FADUtils::cast_to_double(cpvariable->get_normal()(i));
-
-      // save it
-      (*old_cp_normals_)[key] = normal;
+        normal(i) = sign * Core::FADUtils::cast_to_double(cpvariables_.back()->get_normal()(i));
+      (*current_cp_normals_)[key] = normal;
+    }
+    else if (closest_point_normal_.has_value())
+    {
+      (*current_cp_normals_)[key] = closest_point_normal_->second;
     }
   }
 
@@ -2053,6 +2066,10 @@ bool BeamInteraction::BeamToBeamContactPair<numnodes, numnodalvalues>::closest_p
     bool converged = false;
     bool elementscolinear = false;
 
+    // signed normal and distance at the current iterate of the local Newton iteration
+    Core::LinAlg::Matrix<3, 1, double> signed_normal(Core::LinAlg::Initialization::zero);
+    double distance = 0.0;
+
 #ifdef FADCHECKS
     BeamContact::SetFADParCoordDofs<numnodes, numnodalvalues>(eta1, eta2);
 #endif
@@ -2105,30 +2122,20 @@ bool BeamInteraction::BeamToBeamContactPair<numnodes, numnodalvalues>::closest_p
       auto it = old_cp_normals_->find(key);
       if (it != old_cp_normals_->end())
       {
-        Core::LinAlg::Matrix<3, 1, TYPE> n_ref(Core::LinAlg::Initialization::zero);
         for (int i = 0; i < 3; ++i) normal_old(i) = static_cast<TYPE>(it->second(i));
       }
 
+      // Without a reference normal (normal_old = 0), the beams are assumed not to be crossed.
+      double sign = 1.0;
       if (params()->beam_to_beam_contact_params()->use_new_gap_function())
-      {
-        gap = Core::FADUtils::cast_to_double(
-            Core::FADUtils::signum(Core::FADUtils::scalar_product(normal, normal_old)) *
-                norm_delta_r -
-            r1_ - r2_);
+        sign = Core::FADUtils::signum(Core::FADUtils::scalar_product(normal, normal_old));
 
-        // check if we have already stored a normal
-        // if not this is probably the first time that the normal is calculated
-        // hence add it the previous existing normals.
-        auto it = old_cp_normals_->find(key);
-        if (it == old_cp_normals_->end())
-        {
-          it = old_cp_normals_->emplace(key, normal).first;
-        }
-      }
-      else
-      {
-        gap = norm_delta_r - r1_ - r2_;
-      }
+      gap = sign * norm_delta_r - r1_ - r2_;
+
+      // signed normal and distance of the current iterate
+      for (int i = 0; i < 3; ++i)
+        signed_normal(i) = sign * Core::FADUtils::cast_to_double(normal(i));
+      distance = norm_delta_r;
 
       // The closer the beams get, the smaller is norm_delta_r, but
       // norm_delta_r is not allowed to be too small, else numerical problems occur.
@@ -2370,6 +2377,11 @@ bool BeamInteraction::BeamToBeamContactPair<numnodes, numnodalvalues>::closest_p
           eta1 <= eta_right1 + XIETAITERATIVEDISPTOL and
           eta_left2 - XIETAITERATIVEDISPTOL <= eta2 and eta2 <= eta_right2 + XIETAITERATIVEDISPTOL)
       {
+        // Remember the normal at the closest point with the smallest distance (also if the
+        // contact is not active), it is stored as reference normal in evaluate().
+        if (!closest_point_normal_.has_value() or distance < closest_point_normal_->first)
+          closest_point_normal_ = std::make_pair(distance, signed_normal);
+
         // Fixme
         if (std::fabs(eta1 - 1.0) < 1.1 * XIETAITERATIVEDISPTOL or
             std::fabs(eta1 + 1.0) < 1.1 * XIETAITERATIVEDISPTOL or
@@ -4456,8 +4468,11 @@ void BeamInteraction::BeamToBeamContactPair<numnodes, numnodalvalues>::compute_n
 
   // Fixme
   //  if (Core::FADUtils::cast_to_double(gap)<-MAXPENETRATIONSAFETYFAC*(R1_+R2_) and numstep_>0)
+  // With the new gap function, crossed beams are detected via the sign of the gap. This is only
+  // implemented for large-angle contact points (contacttype 0), therefore the penetration is
+  // checked for the other contact types also with the new gap function.
   if (Core::FADUtils::cast_to_double(gap) < -MAXPENETRATIONSAFETYFAC * (r1_ + r2_) and
-      not params()->beam_to_beam_contact_params()->use_new_gap_function())
+      (not params()->beam_to_beam_contact_params()->use_new_gap_function() or contacttype != 0))
   {
     this->print(std::cout);
     throw_recoverable_contact_error(

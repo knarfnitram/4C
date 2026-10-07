@@ -20,6 +20,10 @@
 
 #include <Sacado.hpp>
 
+#include <map>
+#include <optional>
+#include <utility>
+
 FOUR_C_NAMESPACE_OPEN
 
 namespace Core::LinAlg
@@ -41,6 +45,9 @@ namespace BeamInteraction
     }
   };
 
+  //! Map of contact normals for each element pair
+  using ContactNormalMap = std::map<ElementIDKey, Core::LinAlg::Matrix<3, 1, double>>;
+
 
   template <unsigned int numnodes, unsigned int numnodalvalues>
   class BeamToBeamContactVariables;
@@ -60,8 +67,8 @@ namespace BeamInteraction
     /*!
     \brief Standard Constructor
     */
-    BeamToBeamContactPair(
-        std::shared_ptr<std::map<ElementIDKey, Core::LinAlg::Matrix<3, 1, double>>>);
+    BeamToBeamContactPair(std::shared_ptr<const ContactNormalMap> old_cp_normals,
+        std::shared_ptr<ContactNormalMap> current_cp_normals);
 
 
 
@@ -208,9 +215,15 @@ namespace BeamInteraction
     //! Variables stored at the end points of the endpoint-contact algorithm
     std::vector<std::shared_ptr<BeamToBeamContactVariables<numnodes, numnodalvalues>>> epvariables_;
 
-    //! A pointer to a map which contains the normals of the previous state needed for enhanced (new
-    //! gap) estimation
-    std::shared_ptr<std::map<ElementIDKey, Core::LinAlg::Matrix<3, 1, double>>> old_cp_normals_;
+    //! A pointer to a map which contains the normals of the last accepted configuration needed for
+    //! enhanced (new gap) estimation
+    std::shared_ptr<const ContactNormalMap> old_cp_normals_;
+
+    //! A pointer to a map in which the normals of the current configuration are stored
+    std::shared_ptr<ContactNormalMap> current_cp_normals_;
+
+    //! Distance and (signed) normal of the closest point found in the current evaluation
+    std::optional<std::pair<double, Core::LinAlg::Matrix<3, 1, double>>> closest_point_normal_;
     //@}
 
     //! @name Private evaluation methods

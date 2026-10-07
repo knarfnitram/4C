@@ -29,7 +29,8 @@ BeamInteraction::BeamToBeamContactCondition::BeamToBeamContactCondition(
       condition_contact_pairs_(),
       other_line_ids_()
 {
-  old_cp_normals_ = std::make_shared<std::map<ElementIDKey, Core::LinAlg::Matrix<3, 1, double>>>();
+  old_cp_normals_ = std::make_shared<ContactNormalMap>();
+  current_cp_normals_ = std::make_shared<ContactNormalMap>();
 }
 
 /**
@@ -67,6 +68,13 @@ void BeamInteraction::BeamToBeamContactCondition::clear()
 {
   BeamInteractionConditionBase::clear();
   condition_contact_pairs_.clear();
+
+  // The normals of the last evaluation (i.e., of the accepted configuration) become the new
+  // reference normals. Normals of rejected Newton iterates or failed time steps are thereby never
+  // used as reference, and element pairs without a closest point in the accepted configuration do
+  // not have a reference normal anymore.
+  *old_cp_normals_ = std::move(*current_cp_normals_);
+  current_cp_normals_->clear();
 }
 
 /**
@@ -233,19 +241,23 @@ BeamInteraction::BeamToBeamContactCondition::create_contact_pair(
       {
         case 2:
         {
-          return std::make_shared<BeamInteraction::BeamToBeamContactPair<2, 1>>(old_cp_normals_);
+          return std::make_shared<BeamInteraction::BeamToBeamContactPair<2, 1>>(
+              old_cp_normals_, current_cp_normals_);
         }
         case 3:
         {
-          return std::make_shared<BeamInteraction::BeamToBeamContactPair<3, 1>>(old_cp_normals_);
+          return std::make_shared<BeamInteraction::BeamToBeamContactPair<3, 1>>(
+              old_cp_normals_, current_cp_normals_);
         }
         case 4:
         {
-          return std::make_shared<BeamInteraction::BeamToBeamContactPair<4, 1>>(old_cp_normals_);
+          return std::make_shared<BeamInteraction::BeamToBeamContactPair<4, 1>>(
+              old_cp_normals_, current_cp_normals_);
         }
         case 5:
         {
-          return std::make_shared<BeamInteraction::BeamToBeamContactPair<5, 1>>(old_cp_normals_);
+          return std::make_shared<BeamInteraction::BeamToBeamContactPair<5, 1>>(
+              old_cp_normals_, current_cp_normals_);
         }
         default:
         {
@@ -265,7 +277,8 @@ BeamInteraction::BeamToBeamContactCondition::create_contact_pair(
       {
         case 2:
         {
-          return std::make_shared<BeamInteraction::BeamToBeamContactPair<2, 2>>(old_cp_normals_);
+          return std::make_shared<BeamInteraction::BeamToBeamContactPair<2, 2>>(
+              old_cp_normals_, current_cp_normals_);
         }
         default:
         {

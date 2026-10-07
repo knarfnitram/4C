@@ -53,6 +53,10 @@ namespace BeamInteraction
 
     /**
      * \brief Clear not reusable data (derived).
+     *
+     * The pairs are only rebuilt after the current configuration has been accepted (initial
+     * setup, end of a time step, restart). Therefore, the contact normals of the last evaluation
+     * become the reference normals for the sign of the gap (BEAMS_NEWGAP) in the next step.
      */
     void clear() override;
 
@@ -88,9 +92,12 @@ namespace BeamInteraction
     //! Set containing the other line element IDs.
     std::set<int> other_line_ids_;
 
-    //! Create container which stores the local cp normals of previous iteration
-    // with each element pair
-    std::shared_ptr<std::map<ElementIDKey, Core::LinAlg::Matrix<3, 1, double>>> old_cp_normals_;
+    //! Contact normals of the element pairs in the last accepted configuration. They are the
+    //! reference for the sign of the gap (BEAMS_NEWGAP) and are not changed during a time step.
+    std::shared_ptr<ContactNormalMap> old_cp_normals_;
+
+    //! Contact normals of the element pairs in the last evaluated configuration.
+    std::shared_ptr<ContactNormalMap> current_cp_normals_;
   };
 }  // namespace BeamInteraction
 
