@@ -35,17 +35,21 @@ namespace Core::LinAlg
 namespace BeamInteraction
 {
 
-  // create a key based on two element IDs
+  //! Key of a contact point: the two element IDs and, for small-angle contact, the integration
+  //! interval and the Gauss point on element 1 (-1 for the closest point of large-angle contact).
   struct ElementIDKey
   {
     int ele1, ele2;
+    int interval = -1;
+    int gauss_point = -1;
     bool operator<(const ElementIDKey& o) const noexcept
     {
-      return std::tie(ele1, ele2) < std::tie(o.ele1, o.ele2);
+      return std::tie(ele1, ele2, interval, gauss_point) <
+             std::tie(o.ele1, o.ele2, o.interval, o.gauss_point);
     }
   };
 
-  //! Map of contact normals for each element pair
+  //! Map of contact normals for each contact point
   using ContactNormalMap = std::map<ElementIDKey, Core::LinAlg::Matrix<3, 1, double>>;
 
 
@@ -224,6 +228,10 @@ namespace BeamInteraction
 
     //! Distance and (signed) normal of the closest point found in the current evaluation
     std::optional<std::pair<double, Core::LinAlg::Matrix<3, 1, double>>> closest_point_normal_;
+
+    //! (Signed) normals of all Gauss points of the small-angle contact with a projection in the
+    //! current evaluation (also of inactive Gauss points), key: (integration interval, Gauss point)
+    std::map<std::pair<int, int>, Core::LinAlg::Matrix<3, 1, double>> gauss_point_normals_;
     //@}
 
     //! @name Private evaluation methods
@@ -298,7 +306,23 @@ namespace BeamInteraction
     */
     bool point_to_line_projection(double& eta1_source, double& eta_left2, double& l2,
         double& eta2_target, double& gap, double& alpha, bool& pairactive, bool smallanglepair,
-        bool invertpairs = false, bool orthogonalprojection = false);
+        bool invertpairs = false, bool orthogonalprojection = false,
+        const Core::LinAlg::Matrix<3, 1, double>* reference_normal = nullptr,
+        Core::LinAlg::Matrix<3, 1, double>* signed_normal = nullptr);
+
+    /*!
+    \brief Get the reference normal (BEAMS_NEWGAP) of a contact point from the last accepted
+    configuration
+
+    For the closest point (interval = gauss_point = -1), the reference normal of this element pair
+    or, if the contact point has moved to a neighboring element since the last accepted
+    configuration, of a pair of neighboring elements is returned. For a Gauss point of the
+    small-angle contact (fixed position on element 1), the reference normal of the same Gauss point
+    on this element 2 or on a neighbor of element 2 is returned. Returns nullptr if no reference
+    normal exists.
+    */
+    const Core::LinAlg::Matrix<3, 1, double>* get_reference_normal(
+        int interval = -1, int gauss_point = -1) const;
 
     /*!
     \brief Determine minimal distance and contact angle for unconverged segment pair
