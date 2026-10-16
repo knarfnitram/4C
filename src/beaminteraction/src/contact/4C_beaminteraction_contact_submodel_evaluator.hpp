@@ -350,6 +350,10 @@ namespace BeamInteraction
       //! mapping beam ele (elegid) to set of spatially proximal eles (pointer to elements)
       std::map<int, std::set<Core::Elements::Element*>> nearby_elements_map_;
 
+      //! Packed reference normals of the beam-to-beam contact (BEAMS_NEWGAP) read from the restart
+      //! files. They are set in the conditions once the contact pairs are created after the restart.
+      std::vector<char> restart_reference_normals_;
+
       //! runtime visualization writer for visualization of contact forces
       std::shared_ptr<Core::IO::VisualizationManager> visualization_manager_ptr_;
 

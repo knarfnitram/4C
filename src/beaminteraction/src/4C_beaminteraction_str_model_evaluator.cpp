@@ -957,6 +957,9 @@ void Solid::ModelEvaluator::BeamInteractionModelEvaluator::write_restart(
   if (!use_binning_based_partitioning())
   {
     ia_writer->clear_map_cache();
+
+    // sub model loop (e.g., reference normals of the beam-to-beam contact)
+    for (const auto& submodel : *me_vec_ptr_) submodel->write_restart(*ia_writer);
   }
   else
   {
@@ -1018,6 +1021,10 @@ void Solid::ModelEvaluator::BeamInteractionModelEvaluator::read_restart(
     Core::LinAlg::export_to(*ia_state_ptr_->get_dis_np(), *ia_state_ptr_->get_dis_col_np());
 
     partition_problem();
+
+    // sub model loop (e.g., reference normals of the beam-to-beam contact)
+    for (some_iter = me_vec_ptr_->begin(); some_iter != me_vec_ptr_->end(); ++some_iter)
+      (*some_iter)->read_restart(ia_reader);
   }
   else
   {
