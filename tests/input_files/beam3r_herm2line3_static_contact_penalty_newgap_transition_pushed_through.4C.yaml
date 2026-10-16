@@ -1,0 +1,118 @@
+TITLE:
+  - "Transition from large-angle to small-angle beam-to-beam contact with the new gap function
+    (BEAMS_NEWGAP). In the first time step, beam 2 crosses beam 1 at 40 degree without contact, such
+    that only the closest point gets a reference normal. In the second time step, beam 2 is rotated to
+    10 degree and its ends are moved through beam 1, such that the Gauss points of the small-angle
+    contact are deeply penetrated in the Newton iterates and have no reference normal of their own.
+    The reference normal of the closest point of the pair has to be used for them, which must not
+    abort the time step (DIVERCONT stop), and beam 2 has to end up on top of beam 1 (same result as
+    with many small time steps)."
+PROBLEM TYPE:
+  PROBLEMTYPE: "Structure"
+STRUCTURAL DYNAMIC:
+  DYNAMICTYPE: "Statics"
+  TIMESTEP: 1
+  NUMSTEP: 2
+  MAXTIME: 2
+  DIVERCONT: "stop"
+  RESTARTEVERY: 1
+  TOLRES: 1e-08
+  TOLDISP: 1e-08
+  PREDICT: "TangDis"
+  LINEAR_SOLVER: 1
+SOLVER 1:
+  SOLVER: "UMFPACK"
+  NAME: "Structure_Solver"
+BEAM INTERACTION/BEAM TO BEAM CONTACT:
+  BEAMS_NEWGAP: true
+  BEAMS_SEGCON: true
+  BEAMS_BTBPENALTYPARAM: 1000
+  BEAMS_BTBLINEPENALTYPARAM: 1000
+  BEAMS_PERPSHIFTANGLE1: 20
+  BEAMS_PERPSHIFTANGLE2: 30
+  BEAMS_PARSHIFTANGLE1: 20
+  BEAMS_PARSHIFTANGLE2: 30
+  BEAMS_SEGANGLE: 2
+  BEAMS_NUMINTEGRATIONINTERVAL: 10
+BEAM INTERACTION/BEAM TO BEAM CONTACT CONDITIONS:
+  - E: 1
+    COUPLING_ID: 1
+  - E: 2
+    COUPLING_ID: 1
+BINNING STRATEGY:
+  BIN_SIZE_LOWER_BOUND: 0.5
+  DOMAINBOUNDINGBOX: "-1.0 -1.0 -0.5 2.0 1.0 0.5"
+DESIGN POINT DIRICH CONDITIONS:
+  - E: 1
+    NUMDOF: 9
+    ONOFF: [1, 1, 1, 1, 1, 1, 1, 1, 1]
+    VAL: [0, 0, 0, 0, 0, 0, 0, 0, 0]
+    FUNCT: [0, 0, 0, 0, 0, 0, 0, 0, 0]
+  - E: 2
+    NUMDOF: 9
+    ONOFF: [1, 1, 1, 1, 1, 1, 1, 1, 1]
+    VAL: [0, 0, 0, 0, 0, 0, 0, 0, 0]
+    FUNCT: [0, 0, 0, 0, 0, 0, 0, 0, 0]
+  - E: 3
+    NUMDOF: 9
+    ONOFF: [1, 1, 1, 1, 1, 1, 0, 0, 0]
+    VAL: [-0.164072482419923, 0.351854574014707, -0.12, 0, 0, -0.523598775598299, 0, 0, 0]
+    FUNCT: [1, 1, 1, 0, 0, 1, 0, 0, 0]
+  - E: 4
+    NUMDOF: 9
+    ONOFF: [1, 1, 1, 1, 1, 1, 0, 0, 0]
+    VAL: [0.164072482419923, -0.351854574014707, -0.12, 0, 0, -0.523598775598299, 0, 0, 0]
+    FUNCT: [1, 1, 1, 0, 0, 1, 0, 0, 0]
+DNODE-NODE TOPOLOGY:
+  - "NODE 1 DNODE 1"
+  - "NODE 2 DNODE 2"
+  - "NODE 4 DNODE 3"
+  - "NODE 6 DNODE 4"
+DLINE-NODE TOPOLOGY:
+  - "NODE 1 DLINE 1"
+  - "NODE 2 DLINE 1"
+  - "NODE 3 DLINE 1"
+  - "NODE 4 DLINE 2"
+  - "NODE 5 DLINE 2"
+  - "NODE 6 DLINE 2"
+  - "NODE 7 DLINE 2"
+  - "NODE 8 DLINE 2"
+NODE COORDS:
+  - "NODE 1 COORD 0.0 0.0 0.0"
+  - "NODE 2 COORD 1.0 0.0 0.0"
+  - "NODE 3 COORD 0.5 0.0 0.0"
+  - "NODE 4 COORD -0.0745333323392335 -0.482090707264904 0.105"
+  - "NODE 5 COORD 0.5 0 0.105"
+  - "NODE 6 COORD 1.07453333233923 0.482090707264904 0.105"
+  - "NODE 7 COORD 0.212733333830383 -0.241045353632452 0.105"
+  - "NODE 8 COORD 0.787266666169617 0.241045353632452 0.105"
+STRUCTURE ELEMENTS:
+  - "1 BEAM3R LINE3 1 2 3 MAT 1 TRIADS 0 0 0 0 0 0 0 0 0 HERMITE_CENTERLINE true"
+  - "2 BEAM3R LINE3 4 5 7 MAT 1 TRIADS 0 0 0.698131700797732 0 0 0.698131700797732 0 0 0.698131700797732 HERMITE_CENTERLINE true"
+  - "3 BEAM3R LINE3 5 6 8 MAT 1 TRIADS 0 0 0.698131700797732 0 0 0.698131700797732 0 0 0.698131700797732 HERMITE_CENTERLINE true"
+MATERIALS:
+  - MAT: 1
+    MAT_BeamReissnerElastHyper:
+      YOUNG: 100000
+      POISSONRATIO: 0.3
+      DENS: 0
+      CROSSAREA: 0.007853981633974483
+      SHEARCORR: 1
+      MOMINPOL: 9.817477042468104e-06
+      MOMIN2: 4.908738521234052e-06
+      MOMIN3: 4.908738521234052e-06
+FUNCT1:
+  - SYMBOLIC_FUNCTION_OF_SPACE_TIME: "a"
+  - VARIABLE: 0
+    NAME: "a"
+    TYPE: "linearinterpolation"
+    NUMPOINTS: 3
+    TIMES: [0, 1, 2]
+    VALUES: [0, 0, 1]
+RESULT DESCRIPTION:
+  - STRUCTURE:
+      DIS: "structure"
+      NODE: 5
+      QUANTITY: "dispz"
+      VALUE: -0.01593545500693172
+      TOLERANCE: 1e-10

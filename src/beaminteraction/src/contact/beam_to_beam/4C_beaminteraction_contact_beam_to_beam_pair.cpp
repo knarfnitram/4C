@@ -419,10 +419,17 @@ bool BeamInteraction::BeamToBeamContactPair<numnodes, numnodalvalues>::evaluate(
     ElementIDKey key{element1()->id(), element2()->id()};
     if (!cpvariables_.empty())
     {
+      // with several active closest points, the one with the smallest gap is used
+      const auto& cp = *std::min_element(cpvariables_.begin(), cpvariables_.end(),
+          [](const auto& a, const auto& b)
+          {
+            return Core::FADUtils::cast_to_double(a->get_gap()) <
+                   Core::FADUtils::cast_to_double(b->get_gap());
+          });
       Core::LinAlg::Matrix<3, 1, double> normal;
-      const double sign = cpvariables_.back()->get_sign();
+      const double sign = cp->get_sign();
       for (int i = 0; i < 3; ++i)
-        normal(i) = sign * Core::FADUtils::cast_to_double(cpvariables_.back()->get_normal()(i));
+        normal(i) = sign * Core::FADUtils::cast_to_double(cp->get_normal()(i));
       (*current_cp_normals_)[key] = normal;
     }
     else if (closest_point_normal_.has_value())
@@ -517,18 +524,12 @@ void BeamInteraction::BeamToBeamContactPair<numnodes, numnodalvalues>::get_activ
 
 
       // we now need to add the normal stored by the previous solution
-      // if new gap function should be used
+      // if new gap function should be used. Only one reference normal is stored per element pair,
+      // i.e., if several closest points are found (e.g. in a strongly deformed Newton iterate),
+      // all of them use this reference normal.
       if (params()->beam_to_beam_contact_params()->use_new_gap_function() and
           old_cp_normals_ != nullptr)
       {
-        if (cpvariables_.size() > 1)
-        {
-          FOUR_C_THROW(
-              "Currently the New Gap function is not supported if the number "
-              "of segments of the current beam contact "
-              "and previous contact change since only 1 normal per element pair is stored.");
-        }
-
         auto& v = *cpvariables_.back();
         if (const auto* reference_normal = get_reference_normal())
         {
@@ -4516,24 +4517,62 @@ BeamInteraction::BeamToBeamContactPair<numnodes, numnodalvalues>::get_reference_
       it != old_cp_normals_->end())
     return &it->second;
 
+  // Reference normal of a given contact point of one of the element pairs (ids_1 x ids_2)
+  auto find_normal = [&](const std::vector<int>& ids_1, const std::vector<int>& ids_2,
+                         const int interval_, const int gauss_point_)
+      -> const Core::LinAlg::Matrix<3, 1, double>*
+  {
+    for (const int i1 : ids_1)
+      for (const int i2 : ids_2)
+        if (auto it = old_cp_normals_->find(ElementIDKey{i1, i2, interval_, gauss_point_});
+            it != old_cp_normals_->end())
+          return &it->second;
+    return nullptr;
+  };
+
+  // Reference normal of any Gauss point of one of the element pairs (ids_1 x ids_2)
+  auto find_any_gauss_point_normal = [&](const std::vector<int>& ids_1,
+                                         const std::vector<int>& ids_2)
+      -> const Core::LinAlg::Matrix<3, 1, double>*
+  {
+    for (const int i1 : ids_1)
+    {
+      for (const int i2 : ids_2)
+      {
+        // the Gauss points (interval >= 0) are sorted behind the closest point (interval -1)
+        auto it = old_cp_normals_->lower_bound(
+            ElementIDKey{i1, i2, 0, std::numeric_limits<int>::min()});
+        if (it != old_cp_normals_->end() and it->first.ele1 == i1 and it->first.ele2 == i2)
+          return &it->second;
+      }
+    }
+    return nullptr;
+  };
+
   // The contact point may have moved to a neighboring element since the last accepted
   // configuration. The Gauss points of the small-angle contact have a fixed position on element 1,
   // only the closest point can move on both elements.
-  const bool closest_point = (interval == -1 and gauss_point == -1);
-  const std::vector<int> ids1 =
-      closest_point ? element_and_adjacent_element_ids(*element1()) : std::vector<int>{id1};
+  const std::vector<int> own_id1{id1};
+  const std::vector<int> ids1 = element_and_adjacent_element_ids(*element1());
   const std::vector<int> ids2 = element_and_adjacent_element_ids(*element2());
-  for (const int neighbor_id1 : ids1)
+
+  // In the transition between large-angle and small-angle contact, a contact point may not have a
+  // reference normal of its own type, e.g., a Gauss point of a pair that was in large-angle
+  // contact in the last accepted configuration. Then, the reference normal of the other contact
+  // type of the same (or a neighboring) element pair is used. This is valid since for two
+  // (locally straight) beams that have not crossed, the distance vector between any point on beam
+  // 1 and its projection onto beam 2 has a positive component in the direction of the common
+  // normal at the closest point, i.e., all these normals indicate the same side.
+  const bool closest_point = (interval == -1 and gauss_point == -1);
+  if (closest_point)
   {
-    for (const int neighbor_id2 : ids2)
-    {
-      if (auto it = old_cp_normals_->find(
-              ElementIDKey{neighbor_id1, neighbor_id2, interval, gauss_point});
-          it != old_cp_normals_->end())
-        return &it->second;
-    }
+    if (const auto* normal = find_normal(ids1, ids2, -1, -1)) return normal;
+    if (const auto* normal = find_any_gauss_point_normal(own_id1, {id2})) return normal;
+    return find_any_gauss_point_normal(ids1, ids2);
   }
-  return nullptr;
+
+  if (const auto* normal = find_normal(own_id1, ids2, interval, gauss_point)) return normal;
+  return find_normal(ids1, ids2, -1, -1);
 }
 
 /*----------------------------------------------------------------------*

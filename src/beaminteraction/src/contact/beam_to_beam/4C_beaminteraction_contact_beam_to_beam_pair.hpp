@@ -318,8 +318,10 @@ namespace BeamInteraction
     or, if the contact point has moved to a neighboring element since the last accepted
     configuration, of a pair of neighboring elements is returned. For a Gauss point of the
     small-angle contact (fixed position on element 1), the reference normal of the same Gauss point
-    on this element 2 or on a neighbor of element 2 is returned. Returns nullptr if no reference
-    normal exists.
+    on this element 2 or on a neighbor of element 2 is returned. If the contact point has no
+    reference normal of its own type (transition between large-angle and small-angle contact), the
+    reference normal of the other contact type of this or a neighboring element pair is returned.
+    Returns nullptr if no reference normal exists.
     */
     const Core::LinAlg::Matrix<3, 1, double>* get_reference_normal(
         int interval = -1, int gauss_point = -1) const;
