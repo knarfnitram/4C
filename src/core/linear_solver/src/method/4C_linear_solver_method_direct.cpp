@@ -84,6 +84,10 @@ void Core::LinearSolver::DirectSolver::setup(std::shared_ptr<Core::LinAlg::Spars
         solver_type = "MUMPS";
         auto& mumps_params = params.sublist(solver_type);
         mumps_params.set("IsContiguous", false, "Are GIDs Contiguous");
+        // Percentage increase of the estimated working space (Amesos2 default 20). Numerical
+        // pivoting of ill-conditioned matrices can need more fill-in than estimated in the
+        // analysis, which aborts the factorization (INFOG(1) = -9) with the default.
+        mumps_params.set("ICNTL(14)", 100, "Percentage increase of the estimated working space");
         break;
       }
       case SolverType::UMFPACK:
