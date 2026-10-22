@@ -20,6 +20,7 @@
 
 #include <Sacado.hpp>
 
+#include <array>
 #include <map>
 #include <optional>
 #include <utility>
@@ -34,23 +35,19 @@ namespace Core::LinAlg
 
 namespace BeamInteraction
 {
-
-  //! Key of a contact point: the two element IDs and, for small-angle contact, the integration
-  //! interval and the Gauss point on element 1 (-1 for the closest point of large-angle contact).
+  // create a key based on two element IDs
   struct ElementIDKey
   {
     int ele1, ele2;
-    int interval = -1;
-    int gauss_point = -1;
     bool operator<(const ElementIDKey& o) const noexcept
     {
-      return std::tie(ele1, ele2, interval, gauss_point) <
-             std::tie(o.ele1, o.ele2, o.interval, o.gauss_point);
+      return std::tie(ele1, ele2) < std::tie(o.ele1, o.ele2);
     }
   };
 
-  //! Map of contact normals for each contact point
+  //! Map of contact normals for each element pair
   using ContactNormalMap = std::map<ElementIDKey, Core::LinAlg::Matrix<3, 1, double>>;
+
 
 
   template <unsigned int numnodes, unsigned int numnodalvalues>
@@ -113,6 +110,14 @@ namespace BeamInteraction
      *
      */
     void print_summary_one_line_per_active_segment_pair(std::ostream& out) const override;
+
+    /*!
+    \brief Set the centerline Dof values of the two elements in the last accepted configuration
+
+    They are the reference for the sign of the gap with the new gap function (BEAMS_NEWGAP).
+    */
+    void set_accepted_state(const std::vector<double>& centerline_dofvec_ele1,
+        const std::vector<double>& centerline_dofvec_ele2) override;
     //@}
 
     //! @name Access methods
@@ -229,9 +234,10 @@ namespace BeamInteraction
     //! Distance and (signed) normal of the closest point found in the current evaluation
     std::optional<std::pair<double, Core::LinAlg::Matrix<3, 1, double>>> closest_point_normal_;
 
-    //! (Signed) normals of all Gauss points of the small-angle contact with a projection in the
-    //! current evaluation (also of inactive Gauss points), key: (integration interval, Gauss point)
-    std::map<std::pair<int, int>, Core::LinAlg::Matrix<3, 1, double>> gauss_point_normals_;
+    //! Centerline Dof values of the two elements in the last accepted configuration (reference
+    //! for the sign of the gap with the new gap function)
+    std::optional<std::array<Core::LinAlg::Matrix<3 * numnodes * numnodalvalues, 1, double>, 2>>
+        accepted_positions_;
     //@}
 
     //! @name Private evaluation methods
@@ -307,24 +313,32 @@ namespace BeamInteraction
     bool point_to_line_projection(double& eta1_source, double& eta_left2, double& l2,
         double& eta2_target, double& gap, double& alpha, bool& pairactive, bool smallanglepair,
         bool invertpairs = false, bool orthogonalprojection = false,
-        const Core::LinAlg::Matrix<3, 1, double>* reference_normal = nullptr,
-        Core::LinAlg::Matrix<3, 1, double>* signed_normal = nullptr);
+        bool use_reference_normal = false);
 
     /*!
-    \brief Get the reference normal (BEAMS_NEWGAP) of a contact point from the last accepted
-    configuration
+    \brief Get the reference normal (BEAMS_NEWGAP) of the contact point with the parameter
+    coordinates eta1 and eta2
 
-    For the closest point (interval = gauss_point = -1), the reference normal of this element pair
-    or, if the contact point has moved to a neighboring element since the last accepted
-    configuration, of a pair of neighboring elements is returned. For a Gauss point of the
-    small-angle contact (fixed position on element 1), the reference normal of the same Gauss point
-    on this element 2 or on a neighbor of element 2 is returned. If the contact point has no
-    reference normal of its own type (transition between large-angle and small-angle contact), the
-    reference normal of the other contact type of this or a neighboring element pair is returned.
-    Returns nullptr if no reference normal exists.
+    The reference normal is the (unit) distance vector r1(eta1) - r2(eta2) of the two elements in
+    the last accepted configuration. Since the beams are not crossed in the accepted configuration,
+    it indicates on which side of beam 2 beam 1 is, also if the contact point is new, has moved
+    along the beams or to this element pair since the last accepted configuration. Returns no value
+    if the accepted configuration is not known or the distance vector vanishes.
     */
-    const Core::LinAlg::Matrix<3, 1, double>* get_reference_normal(
-        int interval = -1, int gauss_point = -1) const;
+    std::optional<Core::LinAlg::Matrix<3, 1, double>> get_reference_normal(
+        double eta1, double eta2) const;
+
+    /*!
+    \brief Get the reference normal (BEAMS_NEWGAP) of the closest point with the parameter
+    coordinates eta1 and eta2
+
+    The (signed) normal of the closest point of this element pair in the last accepted
+    configuration is used if it exists. It keeps track of the side of the beams also if they
+    penetrate each other deeply over several time steps. Otherwise, e.g. for a new pair or after a
+    restart, the normal is determined from the accepted configuration (get_reference_normal()).
+    */
+    std::optional<Core::LinAlg::Matrix<3, 1, double>> get_closest_point_reference_normal(
+        double eta1, double eta2) const;
 
     /*!
     \brief Determine minimal distance and contact angle for unconverged segment pair

@@ -10,7 +10,6 @@
 #include "4C_beam3_base.hpp"
 #include "4C_beaminteraction_calc_utils.hpp"
 #include "4C_beaminteraction_conditions.hpp"
-#include "4C_beaminteraction_contact_beam_to_beam_condition.hpp"
 #include "4C_beaminteraction_contact_beam_to_solid_edge_params.hpp"
 #include "4C_beaminteraction_contact_beam_to_solid_input.hpp"
 #include "4C_beaminteraction_contact_beam_to_solid_mortar_manager.hpp"
@@ -32,7 +31,6 @@
 #include "4C_beaminteraction_str_model_evaluator_datastate.hpp"
 #include "4C_binstrategy.hpp"
 #include "4C_comm_mpi_utils.hpp"
-#include "4C_comm_pack_helpers.hpp"
 #include "4C_geometric_search_bvh.hpp"
 #include "4C_geometric_search_input.hpp"
 #include "4C_geometric_search_visualization.hpp"
@@ -754,34 +752,7 @@ void BeamInteraction::SubmodelEvaluator::BeamContact::reset_step_state() { check
 void BeamInteraction::SubmodelEvaluator::BeamContact::write_restart(
     Core::IO::DiscretizationWriter& bin_writer) const
 {
-  // Write the reference normals of the beam-to-beam contact (BEAMS_NEWGAP), i.e., the contact
-  // normals of the last accepted configuration, of all beam-to-beam contact conditions. Each
-  // processor writes the normals of its contact pairs.
-  Core::Communication::PackBuffer buffer;
-  for (const auto& [type, conditions] : beam_interaction_conditions_ptr_->get_condition_map())
-  {
-    for (const auto& condition : conditions)
-    {
-      auto beam_to_beam_condition =
-          std::dynamic_pointer_cast<const BeamInteraction::BeamToBeamContactCondition>(condition);
-      if (beam_to_beam_condition == nullptr) continue;
-
-      const auto& normals = beam_to_beam_condition->get_reference_normals();
-      Core::Communication::add_to_pack(buffer, static_cast<int>(normals.size()));
-      for (const auto& [key, normal] : normals)
-      {
-        Core::Communication::add_to_pack(buffer, key.ele1);
-        Core::Communication::add_to_pack(buffer, key.ele2);
-        Core::Communication::add_to_pack(buffer, key.interval);
-        Core::Communication::add_to_pack(buffer, key.gauss_point);
-        for (unsigned int i = 0; i < 3; ++i) Core::Communication::add_to_pack(buffer, normal(i));
-      }
-    }
-  }
-  std::vector<char> data;
-  std::swap(data, buffer());
-  bin_writer.write_char_data("BeamToBeamContactReferenceNormals", data);
-  bin_writer.write_int("BeamToBeamContactReferenceNormalsWritten", 1);
+  // empty
 }
 
 /*----------------------------------------------------------------------------*
@@ -796,13 +767,7 @@ void BeamInteraction::SubmodelEvaluator::BeamContact::pre_read_restart()
 void BeamInteraction::SubmodelEvaluator::BeamContact::read_restart(
     Core::IO::DiscretizationReader& bin_reader)
 {
-  // Restart files written before the reference normals were added do not contain them.
-  restart_reference_normals_.clear();
-  if (!bin_reader.has_int("BeamToBeamContactReferenceNormalsWritten")) return;
-
-  std::shared_ptr<std::vector<char>> data;
-  bin_reader.read_char_vector(data, "BeamToBeamContactReferenceNormals");
-  if (data != nullptr) restart_reference_normals_ = std::move(*data);
+  // empty
 }
 
 /*----------------------------------------------------------------------------*
@@ -813,151 +778,6 @@ void BeamInteraction::SubmodelEvaluator::BeamContact::post_read_restart()
   nearby_elements_map_.clear();
   find_and_store_neighboring_elements();
   create_beam_contact_element_pairs();
-
-  // Set the reference normals of the beam-to-beam contact read from the restart files. This has to
-  // be done after the pairs are created, since creating the pairs resets the reference normals.
-  if (!restart_reference_normals_.empty())
-  {
-    std::vector<std::shared_ptr<BeamInteraction::BeamToBeamContactCondition>>
-        beam_to_beam_conditions;
-    for (const auto& [type, conditions] : beam_interaction_conditions_ptr_->get_condition_map())
-      for (const auto& condition : conditions)
-        if (auto beam_to_beam_condition =
-                std::dynamic_pointer_cast<BeamInteraction::BeamToBeamContactCondition>(condition))
-          beam_to_beam_conditions.push_back(beam_to_beam_condition);
-
-    // The data contains one block per beam-to-beam contact condition for each processor that
-    // wrote it (a processor reads the data of several processors if the number of processors
-    // changed).
-    std::vector<BeamInteraction::ContactNormalMap> normals(beam_to_beam_conditions.size());
-    Core::Communication::UnpackBuffer buffer(restart_reference_normals_);
-    while (!buffer.at_end())
-    {
-      for (auto& condition_normals : normals)
-      {
-        if (buffer.at_end())
-          FOUR_C_THROW(
-              "The restart data does not contain the reference normals of all beam-to-beam "
-              "contact conditions.");
-        int num_normals = 0;
-        Core::Communication::extract_from_pack(buffer, num_normals);
-        for (int i_normal = 0; i_normal < num_normals; ++i_normal)
-        {
-          BeamInteraction::ElementIDKey key{0, 0};
-          Core::Communication::extract_from_pack(buffer, key.ele1);
-          Core::Communication::extract_from_pack(buffer, key.ele2);
-          Core::Communication::extract_from_pack(buffer, key.interval);
-          Core::Communication::extract_from_pack(buffer, key.gauss_point);
-          Core::LinAlg::Matrix<3, 1, double> normal;
-          for (unsigned int i = 0; i < 3; ++i)
-            Core::Communication::extract_from_pack(buffer, normal(i));
-          condition_normals[key] = normal;
-        }
-      }
-    }
-    for (std::size_t i = 0; i < beam_to_beam_conditions.size(); ++i)
-      beam_to_beam_conditions[i]->set_reference_normals(std::move(normals[i]));
-    restart_reference_normals_.clear();
-  }
-
-  // The normals read on a processor are the ones written by it, the pairs may be evaluated on
-  // other processors now.
-  redistribute_beam_to_beam_reference_normals();
-}
-
-/*----------------------------------------------------------------------------*
- *----------------------------------------------------------------------------*/
-void BeamInteraction::SubmodelEvaluator::BeamContact::redistribute_beam_to_beam_reference_normals()
-{
-  TEUCHOS_FUNC_TIME_MONITOR(
-      "BeamInteraction::SubmodelEvaluator::BeamContact::redistribute_beam_to_beam_reference_normals");
-  MPI_Comm comm = discret().get_comm();
-  const int my_rank = Core::Communication::my_mpi_rank(comm);
-  const int num_procs = Core::Communication::num_mpi_ranks(comm);
-
-  for (const auto& [type, conditions] : beam_interaction_conditions_ptr_->get_condition_map())
-  {
-    for (const auto& condition : conditions)
-    {
-      auto beam_to_beam_condition =
-          std::dynamic_pointer_cast<BeamInteraction::BeamToBeamContactCondition>(condition);
-      if (beam_to_beam_condition == nullptr) continue;
-
-      // The pair is evaluated on the owner of the element with the smaller ID (see
-      // select_eles_to_be_considered_for_contact_evaluation()). Most pairs stay on this processor,
-      // only the owners of the other ones are looked up (collective call).
-      const auto& normals = beam_to_beam_condition->get_reference_normals();
-      BeamInteraction::ContactNormalMap redistributed_normals;
-      std::vector<const std::pair<const BeamInteraction::ElementIDKey,
-          Core::LinAlg::Matrix<3, 1, double>>*>
-          moved_normals;
-      std::vector<int> moved_element_ids;
-      for (const auto& entry : normals)
-      {
-        const int element_id = std::min(entry.first.ele1, entry.first.ele2);
-        if (discret().element_row_map()->lid(element_id) >= 0)
-          redistributed_normals.insert(entry);
-        else
-        {
-          moved_normals.push_back(&entry);
-          moved_element_ids.push_back(element_id);
-        }
-      }
-      std::vector<int> target_procs(moved_element_ids.size(), -1);
-      discret().element_row_map()->remote_id_list(moved_element_ids, target_procs, {});
-
-      // pack the normals for each target processor
-      std::vector<Core::Communication::PackBuffer> buffers(num_procs);
-      for (std::size_t i_moved = 0; i_moved < moved_normals.size(); ++i_moved)
-      {
-        const auto& [key, normal] = *moved_normals[i_moved];
-        const int target = target_procs[i_moved];
-        // elements that do not exist anymore (target -1) do not need a reference normal
-        if (target < 0 or target == my_rank) continue;
-        auto& buffer = buffers[target];
-        Core::Communication::add_to_pack(buffer, key.ele1);
-        Core::Communication::add_to_pack(buffer, key.ele2);
-        Core::Communication::add_to_pack(buffer, key.interval);
-        Core::Communication::add_to_pack(buffer, key.gauss_point);
-        for (unsigned int i = 0; i < 3; ++i) Core::Communication::add_to_pack(buffer, normal(i));
-      }
-
-      std::vector<int> send_counts(num_procs), send_displacements(num_procs, 0);
-      std::vector<char> send_data;
-      for (int proc = 0; proc < num_procs; ++proc)
-      {
-        send_displacements[proc] = static_cast<int>(send_data.size());
-        send_counts[proc] = static_cast<int>(buffers[proc]().size());
-        send_data.insert(send_data.end(), buffers[proc]().begin(), buffers[proc]().end());
-      }
-      std::vector<int> receive_counts(num_procs), receive_displacements(num_procs, 0);
-      MPI_Alltoall(send_counts.data(), 1, MPI_INT, receive_counts.data(), 1, MPI_INT, comm);
-      int total_receive = 0;
-      for (int proc = 0; proc < num_procs; ++proc)
-      {
-        receive_displacements[proc] = total_receive;
-        total_receive += receive_counts[proc];
-      }
-      std::vector<char> receive_data(total_receive);
-      MPI_Alltoallv(send_data.data(), send_counts.data(), send_displacements.data(), MPI_CHAR,
-          receive_data.data(), receive_counts.data(), receive_displacements.data(), MPI_CHAR, comm);
-
-      Core::Communication::UnpackBuffer buffer(receive_data);
-      while (!buffer.at_end())
-      {
-        BeamInteraction::ElementIDKey key{0, 0};
-        Core::Communication::extract_from_pack(buffer, key.ele1);
-        Core::Communication::extract_from_pack(buffer, key.ele2);
-        Core::Communication::extract_from_pack(buffer, key.interval);
-        Core::Communication::extract_from_pack(buffer, key.gauss_point);
-        Core::LinAlg::Matrix<3, 1, double> normal;
-        for (unsigned int i = 0; i < 3; ++i)
-          Core::Communication::extract_from_pack(buffer, normal(i));
-        redistributed_normals[key] = normal;
-      }
-      beam_to_beam_condition->set_reference_normals(std::move(redistributed_normals));
-    }
-  }
 }
 
 /*----------------------------------------------------------------------------*
@@ -1317,10 +1137,6 @@ void BeamInteraction::SubmodelEvaluator::BeamContact::create_beam_contact_elemen
   // clear the geometry evaluation data
   beam_interaction_conditions_ptr_->clear();
 
-  // the reference normals of the last accepted configuration are needed on the processors that
-  // evaluate the new pairs
-  redistribute_beam_to_beam_reference_normals();
-
   std::map<int, std::set<Core::Elements::Element*>>::const_iterator nearbyeleiter;
 
   for (nearbyeleiter = nearby_elements_map_.begin(); nearbyeleiter != nearby_elements_map_.end();
@@ -1349,6 +1165,15 @@ void BeamInteraction::SubmodelEvaluator::BeamContact::create_beam_contact_elemen
       {
         pair->init(beam_contact_params_ptr_, ele_ptrs, g_state().get_time_n());
         pair->setup();
+
+        // The pairs are created in the last accepted configuration (initial configuration, end of
+        // a time step, restart), which is the reference for the new gap function.
+        std::vector<std::vector<double>> accepted_dofs(2);
+        for (unsigned int i_element = 0; i_element < 2; ++i_element)
+          BeamInteraction::Utils::extract_pos_dof_vec_absolute_values(discret(),
+              ele_ptrs[i_element], *beam_interaction_data_state_ptr()->get_dis_col_np(),
+              accepted_dofs[i_element]);
+        pair->set_accepted_state(accepted_dofs[0], accepted_dofs[1]);
 
         // add to list of current contact pairs
         contact_elepairs_.push_back(pair);

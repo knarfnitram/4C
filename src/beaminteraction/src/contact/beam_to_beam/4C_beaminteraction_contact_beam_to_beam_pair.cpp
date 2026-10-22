@@ -20,7 +20,6 @@
 #include "4C_beaminteraction_contact_params.hpp"
 #include "4C_contact_input.hpp"
 #include "4C_fem_discretization.hpp"
-#include "4C_fem_general_node.hpp"
 #include "4C_fem_general_utils_fem_shapefunctions.hpp"
 #include "4C_global_data.hpp"
 #include "4C_linalg_serialdensematrix.hpp"
@@ -55,23 +54,6 @@ namespace
   [[noreturn]] void throw_recoverable_contact_error(std::format_string<Args...> fmt, Args&&... args)
   {
     throw Solid::RecoverableEvaluationError(std::format(fmt, std::forward<Args>(args)...));
-  }
-
-  /**
-   * \brief Get the element itself and the elements connected to it via a node.
-   */
-  std::vector<int> element_and_adjacent_element_ids(const Core::Elements::Element& element)
-  {
-    std::vector<int> ids{element.id()};
-    for (int i_node = 0; i_node < element.num_node(); ++i_node)
-    {
-      for (const auto& adjacent_element : element.nodes()[i_node]->adjacent_elements())
-      {
-        const int id = adjacent_element.user_element()->id();
-        if (std::find(ids.begin(), ids.end(), id) == ids.end()) ids.push_back(id);
-      }
-    }
-    return ids;
   }
 }  // namespace
 
@@ -287,16 +269,9 @@ bool BeamInteraction::BeamToBeamContactPair<numnodes, numnodalvalues>::evaluate(
   // Remove the contact normal of the previous evaluation of this pair. It is stored again at the
   // end of this evaluation, if a closest point is found.
   if (current_cp_normals_ != nullptr)
-  {
-    constexpr int min_int = std::numeric_limits<int>::min();
-    constexpr int max_int = std::numeric_limits<int>::max();
-    current_cp_normals_->erase(current_cp_normals_->lower_bound(ElementIDKey{
-                                   element1()->id(), element2()->id(), min_int, min_int}),
-        current_cp_normals_->upper_bound(
-            ElementIDKey{element1()->id(), element2()->id(), max_int, max_int}));
-  }
+    current_cp_normals_->erase(ElementIDKey{element1()->id(), element2()->id()});
   closest_point_normal_.reset();
-  gauss_point_normals_.clear();
+
 
   // initialize the penalty parameter with default one
   double pp = params()->beam_to_beam_contact_params()->beam_to_beam_point_penalty_param();
@@ -407,6 +382,7 @@ bool BeamInteraction::BeamToBeamContactPair<numnodes, numnodalvalues>::evaluate(
     }
   }
 
+
   if (params()->beam_to_beam_contact_params()->use_new_gap_function() and
       current_cp_normals_ != nullptr)
   {
@@ -436,11 +412,6 @@ bool BeamInteraction::BeamToBeamContactPair<numnodes, numnodalvalues>::evaluate(
     {
       (*current_cp_normals_)[key] = closest_point_normal_->second;
     }
-
-    // normals of the Gauss points of the small-angle contact
-    for (const auto& [ids, normal] : gauss_point_normals_)
-      (*current_cp_normals_)[ElementIDKey{element1()->id(), element2()->id(), ids.first,
-          ids.second}] = normal;
   }
 
   // Check whether non-zero contributions are returned and hence need assembly in system variables
@@ -523,15 +494,13 @@ void BeamInteraction::BeamToBeamContactPair<numnodes, numnodalvalues>::get_activ
           closestpoint, leftpoint_ids, integration_ids, pp, 1.0));
 
 
-      // we now need to add the normal stored by the previous solution
-      // if new gap function should be used. Only one reference normal is stored per element pair,
-      // i.e., if several closest points are found (e.g. in a strongly deformed Newton iterate),
-      // all of them use this reference normal.
-      if (params()->beam_to_beam_contact_params()->use_new_gap_function() and
-          old_cp_normals_ != nullptr)
+      // With the new gap function, the normal of the last accepted configuration at the closest
+      // point is the reference for the sign of the gap.
+      if (params()->beam_to_beam_contact_params()->use_new_gap_function())
       {
         auto& v = *cpvariables_.back();
-        if (const auto* reference_normal = get_reference_normal())
+        if (const auto reference_normal = get_closest_point_reference_normal(
+                Core::FADUtils::cast_to_double(closestpoint.first), Core::FADUtils::cast_to_double(closestpoint.second)))
         {
           Core::LinAlg::Matrix<3, 1, TYPE> n_ref(Core::LinAlg::Initialization::zero);
           for (int i = 0; i < 3; ++i) n_ref(i) = (*reference_normal)(i);
@@ -761,21 +730,14 @@ void BeamInteraction::BeamToBeamContactPair<numnodes, numnodalvalues>::get_activ
 
             // With the new gap function, the sign of the gap at this Gauss point is determined
             // with the normal of the last accepted configuration (as for the closest point)
-            const Core::LinAlg::Matrix<3, 1, double>* reference_normal = nullptr;
-            if (params()->beam_to_beam_contact_params()->use_new_gap_function())
-              reference_normal = get_reference_normal(interval, numgp);
-            Core::LinAlg::Matrix<3, 1, double> signed_normal(Core::LinAlg::Initialization::zero);
+            const bool use_new_gap =
+                params()->beam_to_beam_contact_params()->use_new_gap_function();
 
             bool solutionwithinsegment = point_to_line_projection(eta1_source, eta2_segleft, l2,
-                eta2_target, gap_dummy, alpha_dummy, pairactive, true, false, false,
-                reference_normal, &signed_normal);
+                eta2_target, gap_dummy, alpha_dummy, pairactive, true, false, false, use_new_gap);
 
             if (solutionwithinsegment)
             {
-              // Store the normal also for inactive Gauss points, such that Gauss points that get
-              // into contact in the next time step have a reference normal.
-              gauss_point_normals_[std::make_pair(interval, numgp)] = signed_normal;
-
               if (pairactive)
               {
                 TYPE eta1 = eta1_source;
@@ -818,7 +780,9 @@ void BeamInteraction::BeamToBeamContactPair<numnodes, numnodalvalues>::get_activ
                     std::make_shared<BeamToBeamContactVariables<numnodes, numnodalvalues>>(
                         closestpoint, leftpoint_ids, integration_ids, parallel_pp, jacobi));
 
-                if (reference_normal != nullptr)
+                if (const auto reference_normal = use_new_gap
+                                                      ? get_reference_normal(eta1_source, eta2_target)
+                                                      : std::nullopt)
                 {
                   Core::LinAlg::Matrix<3, 1, TYPE> n_ref(Core::LinAlg::Initialization::zero);
                   for (int i = 0; i < 3; ++i) n_ref(i) = (*reference_normal)(i);
@@ -2154,6 +2118,7 @@ bool BeamInteraction::BeamToBeamContactPair<numnodes, numnodalvalues>::closest_p
     Core::LinAlg::Matrix<3, 1, double> signed_normal(Core::LinAlg::Initialization::zero);
     double distance = 0.0;
 
+
 #ifdef FADCHECKS
     BeamContact::SetFADParCoordDofs<numnodes, numnodalvalues>(eta1, eta2);
 #endif
@@ -2202,9 +2167,13 @@ bool BeamInteraction::BeamToBeamContactPair<numnodes, numnodalvalues>::closest_p
       Core::LinAlg::Matrix<3, 1, TYPE> normal_old(Core::LinAlg::Initialization::zero);
       normal.update(1.0 / norm_delta_r, delta_r, 0.0);
 
-      if (const auto* reference_normal = get_reference_normal())
+      if (params()->beam_to_beam_contact_params()->use_new_gap_function())
       {
-        for (int i = 0; i < 3; ++i) normal_old(i) = static_cast<TYPE>((*reference_normal)(i));
+        if (const auto reference_normal =
+                get_closest_point_reference_normal(Core::FADUtils::cast_to_double(eta1), Core::FADUtils::cast_to_double(eta2)))
+        {
+          for (int i = 0; i < 3; ++i) normal_old(i) = static_cast<TYPE>((*reference_normal)(i));
+        }
       }
 
       // Without a reference normal (normal_old = 0), the beams are assumed not to be crossed.
@@ -2519,8 +2488,7 @@ template <unsigned int numnodes, unsigned int numnodalvalues>
 bool BeamInteraction::BeamToBeamContactPair<numnodes, numnodalvalues>::point_to_line_projection(
     double& eta1_source, double& eta_left2, double& l2, double& eta2_target, double& gap,
     double& alpha, bool& pairactive, bool smallanglepair, bool invertpairs,
-    bool orthogonalprojection, const Core::LinAlg::Matrix<3, 1, double>* reference_normal,
-    Core::LinAlg::Matrix<3, 1, double>* signed_normal)
+    bool orthogonalprojection, bool use_reference_normal)
 {
   /* Attention: With the parameters invertpairs and orthogonalprojection, 4 different types of
    * projections can be realized. The parameter invertpairs=true simply changes the meaning of eta1
@@ -2659,23 +2627,20 @@ bool BeamInteraction::BeamToBeamContactPair<numnodes, numnodalvalues>::point_to_
       // be linearized!
       double norm_delta_r = Core::FADUtils::cast_to_double(Core::FADUtils::vector_norm<3>(delta_r));
 
-      // If a reference normal is given (new gap function), a negative scalar product with the
-      // current normal means that the beams have crossed.
+      // With the new gap function, a negative scalar product of the current distance vector with
+      // the reference normal (last accepted configuration) means that the beams have crossed.
       double sign = 1.0;
-      if (reference_normal != nullptr)
+      if (use_reference_normal and not invertpairs)
       {
-        double scalar_product = 0.0;
-        for (int i = 0; i < 3; ++i)
-          scalar_product += Core::FADUtils::cast_to_double(delta_r(i)) * (*reference_normal)(i);
-        if (scalar_product < 0.0) sign = -1.0;
+        if (const auto reference_normal = get_reference_normal(Core::FADUtils::cast_to_double(eta1), Core::FADUtils::cast_to_double(eta2)))
+        {
+          double scalar_product = 0.0;
+          for (int i = 0; i < 3; ++i)
+            scalar_product += Core::FADUtils::cast_to_double(delta_r(i)) * (*reference_normal)(i);
+          if (scalar_product < 0.0) sign = -1.0;
+        }
       }
       gap_test = sign * norm_delta_r - r1_ - r2_;
-
-      if (signed_normal != nullptr and norm_delta_r > 0.0)
-      {
-        for (int i = 0; i < 3; ++i)
-          (*signed_normal)(i) = sign * Core::FADUtils::cast_to_double(delta_r(i)) / norm_delta_r;
-      }
 
       // The closer the beams get, the smaller is norm_delta_r, but
       // norm_delta_r is not allowed to be too small, else numerical problems occur.
@@ -4505,74 +4470,62 @@ bool BeamInteraction::BeamToBeamContactPair<numnodes,
 /*----------------------------------------------------------------------*
  *----------------------------------------------------------------------*/
 template <unsigned int numnodes, unsigned int numnodalvalues>
-const Core::LinAlg::Matrix<3, 1, double>*
-BeamInteraction::BeamToBeamContactPair<numnodes, numnodalvalues>::get_reference_normal(
-    const int interval, const int gauss_point) const
+void BeamInteraction::BeamToBeamContactPair<numnodes, numnodalvalues>::set_accepted_state(
+    const std::vector<double>& centerline_dofvec_ele1,
+    const std::vector<double>& centerline_dofvec_ele2)
 {
-  if (old_cp_normals_ == nullptr) return nullptr;
-
-  const int id1 = element1()->id();
-  const int id2 = element2()->id();
-  if (auto it = old_cp_normals_->find(ElementIDKey{id1, id2, interval, gauss_point});
-      it != old_cp_normals_->end())
-    return &it->second;
-
-  // Reference normal of a given contact point of one of the element pairs (ids_1 x ids_2)
-  auto find_normal = [&](const std::vector<int>& ids_1, const std::vector<int>& ids_2,
-                         const int interval_, const int gauss_point_)
-      -> const Core::LinAlg::Matrix<3, 1, double>*
+  std::array<Core::LinAlg::Matrix<3 * numnodes * numnodalvalues, 1, double>, 2> positions;
+  for (unsigned int i = 0; i < 3 * numnodes * numnodalvalues; i++)
   {
-    for (const int i1 : ids_1)
-      for (const int i2 : ids_2)
-        if (auto it = old_cp_normals_->find(ElementIDKey{i1, i2, interval_, gauss_point_});
-            it != old_cp_normals_->end())
-          return &it->second;
-    return nullptr;
-  };
+    positions[0](i) = centerline_dofvec_ele1[i];
+    positions[1](i) = centerline_dofvec_ele2[i];
+  }
+  accepted_positions_ = positions;
+}
 
-  // Reference normal of any Gauss point of one of the element pairs (ids_1 x ids_2)
-  auto find_any_gauss_point_normal = [&](const std::vector<int>& ids_1,
-                                         const std::vector<int>& ids_2)
-      -> const Core::LinAlg::Matrix<3, 1, double>*
+/*----------------------------------------------------------------------*
+ *----------------------------------------------------------------------*/
+template <unsigned int numnodes, unsigned int numnodalvalues>
+std::optional<Core::LinAlg::Matrix<3, 1, double>>
+BeamInteraction::BeamToBeamContactPair<numnodes, numnodalvalues>::get_reference_normal(
+    const double eta1, const double eta2) const
+{
+  if (!accepted_positions_.has_value()) return std::nullopt;
+
+  // centerline positions of the two elements at eta1 and eta2 in the accepted configuration
+  Core::LinAlg::Matrix<3, 1, double> delta_r(Core::LinAlg::Initialization::zero);
+  for (unsigned int i_element = 0; i_element < 2; ++i_element)
   {
-    for (const int i1 : ids_1)
-    {
-      for (const int i2 : ids_2)
-      {
-        // the Gauss points (interval >= 0) are sorted behind the closest point (interval -1)
-        auto it = old_cp_normals_->lower_bound(
-            ElementIDKey{i1, i2, 0, std::numeric_limits<int>::min()});
-        if (it != old_cp_normals_->end() and it->first.ele1 == i1 and it->first.ele2 == i2)
-          return &it->second;
-      }
-    }
-    return nullptr;
-  };
-
-  // The contact point may have moved to a neighboring element since the last accepted
-  // configuration. The Gauss points of the small-angle contact have a fixed position on element 1,
-  // only the closest point can move on both elements.
-  const std::vector<int> own_id1{id1};
-  const std::vector<int> ids1 = element_and_adjacent_element_ids(*element1());
-  const std::vector<int> ids2 = element_and_adjacent_element_ids(*element2());
-
-  // In the transition between large-angle and small-angle contact, a contact point may not have a
-  // reference normal of its own type, e.g., a Gauss point of a pair that was in large-angle
-  // contact in the last accepted configuration. Then, the reference normal of the other contact
-  // type of the same (or a neighboring) element pair is used. This is valid since for two
-  // (locally straight) beams that have not crossed, the distance vector between any point on beam
-  // 1 and its projection onto beam 2 has a positive component in the direction of the common
-  // normal at the closest point, i.e., all these normals indicate the same side.
-  const bool closest_point = (interval == -1 and gauss_point == -1);
-  if (closest_point)
-  {
-    if (const auto* normal = find_normal(ids1, ids2, -1, -1)) return normal;
-    if (const auto* normal = find_any_gauss_point_normal(own_id1, {id2})) return normal;
-    return find_any_gauss_point_normal(ids1, ids2);
+    Core::LinAlg::Matrix<3, 3 * numnodes * numnodalvalues, TYPE> N(
+        Core::LinAlg::Initialization::zero);
+    get_shape_functions(N, i_element == 0 ? eta1 : eta2, 0, i_element == 0 ? element1() : element2());
+    const double factor = i_element == 0 ? 1.0 : -1.0;
+    for (unsigned int i = 0; i < 3; i++)
+      for (unsigned int j = 0; j < 3 * numnodes * numnodalvalues; j++)
+        delta_r(i) += factor * Core::FADUtils::cast_to_double(N(i, j)) *
+                      (*accepted_positions_)[i_element](j);
   }
 
-  if (const auto* normal = find_normal(own_id1, ids2, interval, gauss_point)) return normal;
-  return find_normal(ids1, ids2, -1, -1);
+  const double norm = delta_r.norm2();
+  if (norm < NORMTOL) return std::nullopt;
+  delta_r.scale(1.0 / norm);
+  return delta_r;
+}
+
+/*----------------------------------------------------------------------*
+ *----------------------------------------------------------------------*/
+template <unsigned int numnodes, unsigned int numnodalvalues>
+std::optional<Core::LinAlg::Matrix<3, 1, double>>
+BeamInteraction::BeamToBeamContactPair<numnodes, numnodalvalues>::get_closest_point_reference_normal(
+    const double eta1, const double eta2) const
+{
+  if (old_cp_normals_ != nullptr)
+  {
+    if (auto it = old_cp_normals_->find(ElementIDKey{element1()->id(), element2()->id()});
+        it != old_cp_normals_->end())
+      return it->second;
+  }
+  return get_reference_normal(eta1, eta2);
 }
 
 /*----------------------------------------------------------------------*

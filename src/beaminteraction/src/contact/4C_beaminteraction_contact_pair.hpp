@@ -126,6 +126,15 @@ namespace BeamInteraction
     /**
      * \brief Update state of rotational DoFs of both elements
      */
+    /**
+     * \brief Set the centerline Dof values of the two elements in the last accepted
+     * configuration (only needed by some pair types, e.g. beam-to-beam contact with the new gap).
+     */
+    virtual void set_accepted_state(const std::vector<double>& centerline_dofvec_ele1,
+        const std::vector<double>& centerline_dofvec_ele2)
+    {
+    }
+
     virtual void reset_rotation_state(const Core::FE::Discretization& discret,
         const std::shared_ptr<const Core::LinAlg::Vector<double>>& ia_discolnp) {};
 

@@ -61,16 +61,6 @@ namespace BeamInteraction
     void clear() override;
 
     /**
-     * \brief Contact normals of the last accepted configuration (reference for BEAMS_NEWGAP).
-     */
-    [[nodiscard]] const ContactNormalMap& get_reference_normals() const { return *old_cp_normals_; }
-
-    /**
-     * \brief Set the contact normals of the last accepted configuration, e.g., after a restart.
-     */
-    void set_reference_normals(ContactNormalMap normals) { *old_cp_normals_ = std::move(normals); }
-
-    /**
      * \brief Create the beam to beam pairs needed for this condition (derived).
      */
     std::shared_ptr<BeamInteraction::BeamContactPair> create_contact_pair(

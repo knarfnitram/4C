@@ -300,17 +300,6 @@ namespace BeamInteraction
           std::set<Core::Elements::Element*>& neighbors) const;
 
       /**
-       * \brief Send the reference normals of the beam-to-beam contact (BEAMS_NEWGAP) to the
-       * processor that evaluates the respective contact pair.
-       *
-       * A contact pair is evaluated on the processor that owns the element with the smaller ID.
-       * Since the elements can be redistributed between two time steps (and after a restart), the
-       * reference normals stored on a processor in the last accepted configuration may belong to
-       * pairs that are now evaluated on another processor.
-       */
-      void redistribute_beam_to_beam_reference_normals();
-
-      /**
        * \brief Check if two beam elements belong to the same beam and are so close to each other
        * along the centerline (in the reference configuration) that a physical contact is not
        * possible.
@@ -360,10 +349,6 @@ namespace BeamInteraction
 
       //! mapping beam ele (elegid) to set of spatially proximal eles (pointer to elements)
       std::map<int, std::set<Core::Elements::Element*>> nearby_elements_map_;
-
-      //! Packed reference normals of the beam-to-beam contact (BEAMS_NEWGAP) read from the restart
-      //! files. They are set in the conditions once the contact pairs are created after the restart.
-      std::vector<char> restart_reference_normals_;
 
       //! runtime visualization writer for visualization of contact forces
       std::shared_ptr<Core::IO::VisualizationManager> visualization_manager_ptr_;
