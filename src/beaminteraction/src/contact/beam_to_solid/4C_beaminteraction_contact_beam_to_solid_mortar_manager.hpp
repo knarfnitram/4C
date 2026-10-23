@@ -229,6 +229,12 @@ namespace BeamInteraction
      */
     bool have_lagrange_dofs() const;
 
+    /**
+     * \brief Check if the evaluation of a pair failed for the current state in the last
+     * evaluation (only on this rank, see evaluate_and_assemble_global_coupling_contributions()).
+     */
+    [[nodiscard]] bool evaluation_failed() const { return evaluation_failed_; }
+
     BeamToSolid::BeamToSolidLagrangeFormulation get_lagrange_formulation()
     {
       return parameters_.lagrange_formulation;
@@ -369,6 +375,9 @@ namespace BeamInteraction
     get_penalty_regularization(const bool compute_linearization = false) const;
 
    protected:
+    //! Flag if the evaluation of a pair failed for the current state (only on this rank).
+    bool evaluation_failed_ = false;
+
     //! Flag if setup was called.
     bool is_setup_;
 

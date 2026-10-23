@@ -35,6 +35,7 @@
 #include "4C_geometric_search_input.hpp"
 #include "4C_geometric_search_visualization.hpp"
 #include "4C_geometry_pair_line_to_3D_evaluation_data.hpp"
+#include "4C_geometry_pair_projection_error.hpp"
 #include "4C_global_data.hpp"
 #include "4C_io.hpp"
 #include "4C_io_control.hpp"
@@ -463,7 +464,30 @@ void BeamInteraction::SubmodelEvaluator::BeamContact::throw_if_evaluation_failed
  *----------------------------------------------------------------------*/
 void BeamInteraction::SubmodelEvaluator::BeamContact::pre_evaluate()
 {
-  for (auto& elepairptr : contact_elepairs_) elepairptr->pre_evaluate();
+  // If the geometry of a pair can not be evaluated for the current state
+  // (GEOMETRY_PAIR_SEGMENTATION_PROJECTION_FAILURE_ACTION reduce_time_step), the evaluation is
+  // aborted on all ranks with a recoverable error, such that the time step can be reduced.
+  int local_pre_evaluation_failed = 0;
+  for (auto& elepairptr : contact_elepairs_)
+  {
+    try
+    {
+      elepairptr->pre_evaluate();
+    }
+    catch (const GeometryPair::ProjectionError& error)
+    {
+      std::cout << "Rank " << g_state().get_my_rank()
+                << ": Pre-evaluation of beam contact pair (element IDs "
+                << elepairptr->element1()->id() << " & " << elepairptr->element2()->id()
+                << ") failed:\n"
+                << error.what() << "\n";
+      local_pre_evaluation_failed = 1;
+    }
+  }
+  if (Core::Communication::max_all(local_pre_evaluation_failed, discret().get_comm()) > 0)
+    throw Solid::RecoverableEvaluationError(
+        "The pre-evaluation of at least one beam contact pair failed for the current "
+        "configuration.");
 }
 
 /*----------------------------------------------------------------------*

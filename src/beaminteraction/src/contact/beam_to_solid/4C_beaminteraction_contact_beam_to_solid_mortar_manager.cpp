@@ -5,6 +5,7 @@
 //
 // SPDX-License-Identifier: LGPL-3.0-or-later
 
+#include "4C_geometry_pair_projection_error.hpp"
 #include "4C_beaminteraction_contact_beam_to_solid_mortar_manager.hpp"
 
 #include "4C_beaminteraction_calc_utils.hpp"
@@ -527,13 +528,30 @@ void BeamInteraction::BeamToSolidMortarManager::evaluate_and_assemble_global_cou
   kappa_lin_solid_->put_scalar(0.);
   lambda_active_->put_scalar(0.);
 
+  evaluation_failed_ = false;
   for (auto& elepairptr : contact_pairs_)
   {
     // Evaluate the mortar contributions of the pair and the pair assembles the terms into the
-    // global matrices.
-    elepairptr->evaluate_and_assemble_mortar_contributions(*discret_, this, *constraint_lin_beam_,
-        *constraint_lin_solid_, *force_beam_lin_lambda_, *force_solid_lin_lambda_, *constraint_,
-        *kappa_, *kappa_lin_beam_, *kappa_lin_solid_, *lambda_active_, displacement_vector);
+    // global matrices. If the geometry of the pair can not be evaluated for the current state
+    // (GEOMETRY_PAIR_SEGMENTATION_PROJECTION_FAILURE_ACTION reduce_time_step), the failure is only
+    // stored here, since the global matrices have to be completed on all ranks. It is
+    // communicated to all ranks in BeamContact::throw_if_evaluation_failed().
+    try
+    {
+      elepairptr->evaluate_and_assemble_mortar_contributions(*discret_, this,
+          *constraint_lin_beam_, *constraint_lin_solid_, *force_beam_lin_lambda_,
+          *force_solid_lin_lambda_, *constraint_, *kappa_, *kappa_lin_beam_, *kappa_lin_solid_,
+          *lambda_active_, displacement_vector);
+    }
+    catch (const GeometryPair::ProjectionError& error)
+    {
+      std::cout << "Rank " << Core::Communication::my_mpi_rank(discret_->get_comm())
+                << ": Evaluation of beam-to-solid pair (element IDs "
+                << elepairptr->element1()->id() << " & " << elepairptr->element2()->id()
+                << ") failed:\n"
+                << error.what() << "\n";
+      evaluation_failed_ = true;
+    }
   }
 
   // Complete the global mortar matrices.

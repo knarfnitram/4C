@@ -32,6 +32,7 @@ void BeamInteraction::SubmodelEvaluator::BeamContactAssemblyManagerInDirect::eva
     const std::shared_ptr<BeamInteraction::BeamToSolidVolumeMeshtyingParams>
         beam_to_solid_volume_meshtying_params)
 {
+  evaluation_failed_ = false;
   if (mortar_manager_->have_lagrange_dofs())
   {
     mortar_manager_->evaluate_coupling_terms_lagrange(data_state, fe_sysmat, fe_sysvec);
@@ -111,6 +112,10 @@ void BeamInteraction::SubmodelEvaluator::BeamContactAssemblyManagerInDirect::eva
   {
     mortar_manager_->evaluate_force_stiff_penalty_regularization(data_state, fe_sysmat, fe_sysvec);
   }
+
+  // Failures of the pair evaluation for the current state (see
+  // BeamContact::throw_if_evaluation_failed())
+  evaluation_failed_ = mortar_manager_->evaluation_failed();
 }
 
 

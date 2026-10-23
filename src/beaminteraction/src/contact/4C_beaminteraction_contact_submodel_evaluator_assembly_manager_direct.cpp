@@ -5,6 +5,7 @@
 //
 // SPDX-License-Identifier: LGPL-3.0-or-later
 
+#include "4C_geometry_pair_projection_error.hpp"
 #include "4C_beaminteraction_contact_submodel_evaluator_assembly_manager_direct.hpp"
 
 #include "4C_beaminteraction_calc_utils.hpp"
@@ -80,8 +81,13 @@ void BeamInteraction::SubmodelEvaluator::BeamContactAssemblyManagerDirect::evalu
               &(elestiff_centerlineDOFs[0][0]), &(elestiff_centerlineDOFs[0][1]),
               &(elestiff_centerlineDOFs[1][0]), &(elestiff_centerlineDOFs[1][1]));
     }
-    catch (const Solid::RecoverableEvaluationError& error)
+    catch (const Core::Exception& error)
     {
+      // only failures of the pair evaluation for the current state are handled here
+      if (dynamic_cast<const Solid::RecoverableEvaluationError*>(&error) == nullptr and
+          dynamic_cast<const GeometryPair::ProjectionError*>(&error) == nullptr)
+        throw;
+
       std::cout << "Rank " << Core::Communication::my_mpi_rank(discret->get_comm())
                 << ": Evaluation of beam contact pair (element IDs " << elepairptr->element1()->id()
                 << " & " << elepairptr->element2()->id() << ") failed:\n"
