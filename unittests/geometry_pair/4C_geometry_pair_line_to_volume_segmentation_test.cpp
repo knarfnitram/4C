@@ -15,6 +15,7 @@
 #include "4C_geometry_pair_element_evaluation_functions.hpp"
 #include "4C_geometry_pair_line_to_3D_evaluation_data.hpp"
 #include "4C_geometry_pair_line_to_volume_segmentation_geometry_functions_test.hpp"
+#include "4C_geometry_pair_projection_error.hpp"
 #include "4C_geometry_pair_utility_classes.hpp"
 #include "4C_unittest_utils_assertions_test.hpp"
 
@@ -452,5 +453,43 @@ namespace
     FOUR_C_EXPECT_THROW_WITH_MESSAGE(create_evaluate_pairs(geometry_pairs, q_line_elements,
                                          line_ref_lengths, q_volume_elements, segments_vector),
         Core::Exception, "Error when projecting the Gauss points.");
+  }
+
+  /**
+   * Test that non valid projected Gauss points throw a GeometryPair::ProjectionError, if
+   * GEOMETRY_PAIR_SEGMENTATION_PROJECTION_FAILURE_ACTION is reduce_time_step. This error can be
+   * handled by the code evaluating the pairs, e.g., by a reduction of the time step size.
+   */
+  TEST_F(GeometryPairLineToVolumeSegmentationTest, TestNonValidGaussPointsProjectionErrorHex8)
+  {
+    // Definition of variables for this test case.
+    std::vector<Core::LinAlg::Matrix<12, 1, double>> q_line_elements;
+    std::vector<double> line_ref_lengths;
+    std::vector<Core::LinAlg::Matrix<24, 1, double>> q_volume_elements;
+    std::vector<std::shared_ptr<GeometryPair::GeometryPairLineToVolumeSegmentation<double,
+        GeometryPair::t_hermite, GeometryPair::t_hex8>>>
+        geometry_pairs;
+
+    // Get the geometry.
+    xtest_create_geometry_single_hex8_with_pre_curved_line(
+        line_elements_, volume_elements_, q_line_elements, line_ref_lengths, q_volume_elements);
+
+    // Same settings as in TestNonValidGaussPointsThrowHex8, but the failed projection is reported
+    // as projection error
+    Teuchos::ParameterList line_to_volume_params_list;
+    set_up_default_parameters_line_to_3d(line_to_volume_params_list);
+    line_to_volume_params_list.set("GEOMETRY_PAIR_SEGMENTATION_SEARCH_POINTS", 2);
+    line_to_volume_params_list.set("GEOMETRY_PAIR_SEGMENTATION_PROJECTION_FAILURE_ACTION",
+        GeometryPair::ProjectionFailureAction::reduce_time_step);
+    evaluation_data_ =
+        std::make_shared<GeometryPair::LineTo3DEvaluationData>(line_to_volume_params_list);
+
+    // Vector with vector of segments for Evaluate.
+    std::vector<std::vector<GeometryPair::LineSegment<double>>> segments_vector;
+
+    // Create and evaluate the geometry pairs.
+    FOUR_C_EXPECT_THROW_WITH_MESSAGE(create_evaluate_pairs(geometry_pairs, q_line_elements,
+                                         line_ref_lengths, q_volume_elements, segments_vector),
+        GeometryPair::ProjectionError, "Error when projecting the Gauss points.");
   }
 }  // namespace

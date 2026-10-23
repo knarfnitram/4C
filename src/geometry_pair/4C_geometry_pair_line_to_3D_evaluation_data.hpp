@@ -66,6 +66,14 @@ namespace GeometryPair
     }
 
     /**
+     * \brief Get the flag on what to do if the Gauss points of a segment can not be projected.
+     */
+    inline GeometryPair::ProjectionFailureAction get_projection_failure_action() const
+    {
+      return projection_failure_action_;
+    }
+
+    /**
      * \brief Get the Gauss rule to be used for Gauss point projection method.
      * @return Gauss rule
      */
@@ -132,6 +140,9 @@ namespace GeometryPair
 
     //! What to do if not all Gauss points of a segment project valid
     GeometryPair::NotAllGaussPointsProjectValidAction not_all_gauss_points_project_valid_action_;
+
+    //! What to do if the Gauss points of a segment can not be projected
+    GeometryPair::ProjectionFailureAction projection_failure_action_;
 
     //! Segment tracking vector for segmentation. We use double in this case, because otherwise the
     //! class would have to be templated on the type of this tracker.

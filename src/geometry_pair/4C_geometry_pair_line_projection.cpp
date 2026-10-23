@@ -15,7 +15,10 @@
 #include "4C_geometry_pair_line_to_surface_segmentation.hpp"
 #include "4C_geometry_pair_line_to_volume_gauss_point_projection.hpp"
 #include "4C_geometry_pair_line_to_volume_segmentation.hpp"
+#include "4C_geometry_pair_projection_error.hpp"
 #include "4C_geometry_pair_scalar_types.hpp"
+
+#include <format>
 #include "4C_geometry_pair_utility_functions.hpp"
 #include "4C_utils_fad.hpp"
 
@@ -165,6 +168,14 @@ void GeometryPair::LineTo3DBase<PairType>::project_gauss_points_on_segment_to_ot
     if (is_warning)
     {
       std::cout << error_message.str();
+    }
+    else if (evaluation_data.get_projection_failure_action() ==
+             GeometryPair::ProjectionFailureAction::reduce_time_step)
+    {
+      throw GeometryPair::ProjectionError(std::format(
+          "{}\n\nError when projecting the Gauss points. There are {} Gauss points, {} "
+          "could be projected and {} of the projected ones are valid.",
+          error_message.str(), gauss_points.nquad, n_projections, n_valid_projections));
     }
     else
     {

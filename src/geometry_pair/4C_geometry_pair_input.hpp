@@ -46,6 +46,16 @@ namespace GeometryPair
   };
 
   /**
+   * Flag on what to do if the Gauss points of a segment can not be projected (or not all of them
+   * project valid with NotAllGaussPointsProjectValidAction::fail)
+   */
+  enum class ProjectionFailureAction
+  {
+    fail,              // Raise an error
+    reduce_time_step,  // Treat the current state as not evaluable, i.e., reduce the time step
+  };
+
+  /**
    * Method to be used for normals in surface pairs.
    */
   enum class SurfaceNormals

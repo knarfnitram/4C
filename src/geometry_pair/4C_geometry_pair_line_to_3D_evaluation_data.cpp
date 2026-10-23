@@ -24,6 +24,7 @@ GeometryPair::LineTo3DEvaluationData::LineTo3DEvaluationData(
       n_search_points_(0),
       not_all_gauss_points_project_valid_action_(
           GeometryPair::NotAllGaussPointsProjectValidAction::fail),
+      projection_failure_action_(GeometryPair::ProjectionFailureAction::fail),
       segment_tracker_()
 {
   // Get parameters from the input file.
@@ -36,6 +37,11 @@ GeometryPair::LineTo3DEvaluationData::LineTo3DEvaluationData(
         Teuchos::getIntegralValue<GeometryPair::NotAllGaussPointsProjectValidAction>(
             input_parameter_list,
             "GEOMETRY_PAIR_SEGMENTATION_NOT_ALL_GAUSS_POINTS_PROJECT_VALID_ACTION");
+    // optional parameter (not set in all parameter lists), the default is to fail
+    if (input_parameter_list.isParameter("GEOMETRY_PAIR_SEGMENTATION_PROJECTION_FAILURE_ACTION"))
+      projection_failure_action_ =
+          Teuchos::getIntegralValue<GeometryPair::ProjectionFailureAction>(
+              input_parameter_list, "GEOMETRY_PAIR_SEGMENTATION_PROJECTION_FAILURE_ACTION");
 
     gauss_rule_ = GeometryPair::int_to_gauss_rule1_d(input_parameter_list.get<int>("GAUSS_POINTS"));
 

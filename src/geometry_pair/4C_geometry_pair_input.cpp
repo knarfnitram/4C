@@ -33,6 +33,17 @@ void GeometryPair::valid_parameters_line_to_3d(std::vector<Core::IO::InputSpec>&
       {.description = "What to do if not all Gauss points of a segment project valid",
           .default_value = NotAllGaussPointsProjectValidAction::fail}));
 
+  // What to do if the Gauss points of a segment can not be projected
+  list.push_back(parameter<ProjectionFailureAction>(
+      "GEOMETRY_PAIR_SEGMENTATION_PROJECTION_FAILURE_ACTION",
+      {.description =
+              "What to do if the Gauss points of a segment can not be projected (or not all of them "
+              "project valid with GEOMETRY_PAIR_SEGMENTATION_NOT_ALL_GAUSS_POINTS_PROJECT_VALID_ACTION "
+              "fail). fail: raise an error, reduce_time_step: treat the current state as not "
+              "evaluable, such that the time step is reduced (DIVERCONT adapt_step), e.g. for "
+              "strongly distorted Newton iterates",
+          .default_value = ProjectionFailureAction::fail}));
+
   // Number of integration points on the line.
   list.push_back(parameter<int>("GAUSS_POINTS",
       {.description = "Number of Gauss Points for the integral evaluations", .default_value = 6}));
