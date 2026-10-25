@@ -18,7 +18,7 @@ namespace GeometryPair
 {
   /**
    * @brief Error signaling that the Gauss points of a segment could not be projected for the
-   * current configuration.
+   * current configuration, or that the segments of a line overlap.
    *
    * It is thrown instead of a hard error (FOUR_C_THROW), if
    * GEOMETRY_PAIR_SEGMENTATION_PROJECTION_FAILURE_ACTION is set to reduce_time_step. The code

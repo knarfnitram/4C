@@ -39,7 +39,7 @@ void GeometryPair::valid_parameters_line_to_3d(std::vector<Core::IO::InputSpec>&
       {.description =
               "What to do if the Gauss points of a segment can not be projected (or not all of them "
               "project valid with GEOMETRY_PAIR_SEGMENTATION_NOT_ALL_GAUSS_POINTS_PROJECT_VALID_ACTION "
-              "fail). fail: raise an error, reduce_time_step: treat the current state as not "
+              "fail), or if segments of a line overlap. fail: raise an error, reduce_time_step: treat the current state as not "
               "evaluable, such that the time step is reduced (DIVERCONT adapt_step), e.g. for "
               "strongly distorted Newton iterates",
           .default_value = ProjectionFailureAction::fail}));

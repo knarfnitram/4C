@@ -47,7 +47,7 @@ namespace GeometryPair
 
   /**
    * Flag on what to do if the Gauss points of a segment can not be projected (or not all of them
-   * project valid with NotAllGaussPointsProjectValidAction::fail)
+   * project valid with NotAllGaussPointsProjectValidAction::fail), or if segments of a line overlap
    */
   enum class ProjectionFailureAction
   {

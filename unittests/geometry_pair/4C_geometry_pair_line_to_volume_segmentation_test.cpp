@@ -492,4 +492,82 @@ namespace
                                          line_ref_lengths, q_volume_elements, segments_vector),
         GeometryPair::ProjectionError, "Error when projecting the Gauss points.");
   }
+  /**
+   * Add a second hex8 to the geometry of TestHex8WithLine, which is shifted in x-direction and
+   * therefore overlaps with the first one, as it can happen for strongly distorted Newton iterates.
+   * The line segments of the two pairs overlap.
+   */
+  void create_geometry_overlapping_hex8_with_pre_curved_line(
+      std::vector<std::shared_ptr<Core::Elements::Element>>& line_elements,
+      std::vector<std::shared_ptr<Core::Elements::Element>>& volume_elements,
+      std::vector<Core::LinAlg::Matrix<12, 1, double>>& q_line_elements,
+      std::vector<double>& line_ref_lengths,
+      std::vector<Core::LinAlg::Matrix<24, 1, double>>& q_volume_elements)
+  {
+    xtest_create_geometry_single_hex8_with_pre_curved_line(
+        line_elements, volume_elements, q_line_elements, line_ref_lengths, q_volume_elements);
+    volume_elements.push_back(std::make_shared<Discret::Elements::Solid<3>>(2, 0));
+    q_volume_elements.push_back(q_volume_elements.back());
+    for (unsigned int i_node = 0; i_node < 8; i_node++) q_volume_elements.back()(3 * i_node) += 0.02;
+  }
+
+  /**
+   * Test that overlapping segments of a line raise an error.
+   */
+  TEST_F(GeometryPairLineToVolumeSegmentationTest, TestOverlappingSegmentsThrowHex8)
+  {
+    // Definition of variables for this test case.
+    std::vector<Core::LinAlg::Matrix<12, 1, double>> q_line_elements;
+    std::vector<double> line_ref_lengths;
+    std::vector<Core::LinAlg::Matrix<24, 1, double>> q_volume_elements;
+    std::vector<std::shared_ptr<GeometryPair::GeometryPairLineToVolumeSegmentation<double,
+        GeometryPair::t_hermite, GeometryPair::t_hex8>>>
+        geometry_pairs;
+
+    // Get the geometry.
+    create_geometry_overlapping_hex8_with_pre_curved_line(
+        line_elements_, volume_elements_, q_line_elements, line_ref_lengths, q_volume_elements);
+
+    // Vector with vector of segments for Evaluate.
+    std::vector<std::vector<GeometryPair::LineSegment<double>>> segments_vector;
+
+    // Create and evaluate the geometry pairs.
+    FOUR_C_EXPECT_THROW_WITH_MESSAGE(create_evaluate_pairs(geometry_pairs, q_line_elements,
+                                         line_ref_lengths, q_volume_elements, segments_vector),
+        Core::Exception, "The two segments are overlapping.");
+  }
+
+  /**
+   * Test that overlapping segments of a line throw a GeometryPair::ProjectionError, if
+   * GEOMETRY_PAIR_SEGMENTATION_PROJECTION_FAILURE_ACTION is reduce_time_step.
+   */
+  TEST_F(GeometryPairLineToVolumeSegmentationTest, TestOverlappingSegmentsProjectionErrorHex8)
+  {
+    // Definition of variables for this test case.
+    std::vector<Core::LinAlg::Matrix<12, 1, double>> q_line_elements;
+    std::vector<double> line_ref_lengths;
+    std::vector<Core::LinAlg::Matrix<24, 1, double>> q_volume_elements;
+    std::vector<std::shared_ptr<GeometryPair::GeometryPairLineToVolumeSegmentation<double,
+        GeometryPair::t_hermite, GeometryPair::t_hex8>>>
+        geometry_pairs;
+
+    // Get the geometry.
+    create_geometry_overlapping_hex8_with_pre_curved_line(
+        line_elements_, volume_elements_, q_line_elements, line_ref_lengths, q_volume_elements);
+
+    Teuchos::ParameterList line_to_volume_params_list;
+    set_up_default_parameters_line_to_3d(line_to_volume_params_list);
+    line_to_volume_params_list.set("GEOMETRY_PAIR_SEGMENTATION_PROJECTION_FAILURE_ACTION",
+        GeometryPair::ProjectionFailureAction::reduce_time_step);
+    evaluation_data_ =
+        std::make_shared<GeometryPair::LineTo3DEvaluationData>(line_to_volume_params_list);
+
+    // Vector with vector of segments for Evaluate.
+    std::vector<std::vector<GeometryPair::LineSegment<double>>> segments_vector;
+
+    // Create and evaluate the geometry pairs.
+    FOUR_C_EXPECT_THROW_WITH_MESSAGE(create_evaluate_pairs(geometry_pairs, q_line_elements,
+                                         line_ref_lengths, q_volume_elements, segments_vector),
+        GeometryPair::ProjectionError, "overlaps with the existing segment");
+  }
 }  // namespace

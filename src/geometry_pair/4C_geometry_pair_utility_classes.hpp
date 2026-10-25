@@ -383,6 +383,23 @@ namespace GeometryPair
     }
 
     /**
+     * \brief Check if this segment and another segment are overlapping, i.e., they share a part of
+     * the line but are not equal.
+     */
+    bool is_overlapping(const LineSegment<ScalarType>& other) const
+    {
+      if (get_eta_b() < other.get_eta_a() + Constants::projection_xi_eta_tol ||
+          get_eta_a() > other.get_eta_b() - Constants::projection_xi_eta_tol)
+        // The segments do not overlap.
+        return false;
+      else if (abs(get_eta_a() - other.get_eta_a()) < Constants::projection_xi_eta_tol &&
+               abs(get_eta_b() - other.get_eta_b()) < Constants::projection_xi_eta_tol)
+        // The segments are equal.
+        return false;
+      return true;
+    }
+
+    /**
      * \brief Overloaded $<$ operator.
      * @param lhs
      * @param rhs
@@ -392,16 +409,7 @@ namespace GeometryPair
     {
       if (lhs.get_eta_b() < rhs.get_eta_a() + Constants::projection_xi_eta_tol)
         return true;
-      else if (lhs.get_eta_a() > rhs.get_eta_b() - Constants::projection_xi_eta_tol)
-      {
-        // The segments do not overlap.
-      }
-      else if (abs(lhs.get_eta_a() - rhs.get_eta_a()) < Constants::projection_xi_eta_tol &&
-               abs(lhs.get_eta_b() - rhs.get_eta_b()) < Constants::projection_xi_eta_tol)
-      {
-        // The segments are equal.
-      }
-      else
+      else if (lhs.is_overlapping(rhs))
       {
         FOUR_C_THROW(
             "The two segments are overlapping. This is fatal! lhs: [{}, {}], rhs: [{}, {}]",

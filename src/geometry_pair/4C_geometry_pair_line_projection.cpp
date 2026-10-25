@@ -498,6 +498,24 @@ void GeometryPair::LineTo3DSegmentation<PairType>::evaluate(const PairType* pair
 
             if (std::abs(segment_start.get_eta() - start_point.get_eta()) > allowed_segment_size)
             {
+              // Segments of different pairs of this line must not overlap. This can happen for
+              // strongly distorted Newton iterates. The comparison in the segment tracker would
+              // raise a hard error in this case, report it as projection error if requested.
+              if (pair->get_evaluation_data()->get_projection_failure_action() ==
+                  GeometryPair::ProjectionFailureAction::reduce_time_step)
+              {
+                for (const auto& existing_segment : segment_tracker)
+                {
+                  if (new_segment_double.is_overlapping(existing_segment))
+                    throw GeometryPair::ProjectionError(std::format(
+                        "The segment [{}, {}] of line element {} overlaps with the existing "
+                        "segment [{}, {}].",
+                        new_segment_double.get_eta_a(), new_segment_double.get_eta_b(),
+                        pair->element1()->id(), existing_segment.get_eta_a(),
+                        existing_segment.get_eta_b()));
+                }
+              }
+
               // Check if the segment already exists for this line.
               if (segment_tracker.find(new_segment_double) == segment_tracker.end())
               {
