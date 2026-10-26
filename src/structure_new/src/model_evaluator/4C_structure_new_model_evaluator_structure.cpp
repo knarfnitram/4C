@@ -10,6 +10,7 @@
 #include "4C_beam3_base.hpp"
 #include "4C_beam3_discretization_runtime_output_params.hpp"
 #include "4C_beam3_discretization_runtime_vtu_writer.hpp"
+#include "4C_comm_mpi_utils.hpp"
 #include "4C_fem_discretization.hpp"
 #include "4C_fem_discretization_utils.hpp"
 #include "4C_fem_general_utils_gauss_point_postprocess.hpp"
@@ -31,6 +32,7 @@
 #include "4C_structure_new_integrator.hpp"
 #include "4C_structure_new_model_evaluator_data.hpp"
 #include "4C_structure_new_predict_generic.hpp"
+#include "4C_structure_new_recoverable_evaluation_error.hpp"
 #include "4C_structure_new_timint_basedataio.hpp"
 #include "4C_structure_new_timint_basedataio_runtime_vtk_output.hpp"
 #include "4C_structure_new_timint_implicit.hpp"
@@ -38,7 +40,71 @@
 
 #include <Teuchos_ParameterList.hpp>
 
+#include <functional>
+#include <iostream>
+
+#ifdef FOUR_C_ENABLE_FE_TRAPPING
+#include <cfenv>
+#endif
+
 FOUR_C_NAMESPACE_OPEN
+
+namespace
+{
+  /**
+   * @brief Runs the \p evaluation and detects whether a floating point exception occurred on any
+   * rank.
+   *
+   * The trapping of the floating point exceptions is disabled during the evaluation, such that a
+   * strongly distorted (trial) state, e.g., a collapsed element in a Newton iterate, does not abort
+   * the simulation. An error thrown during the evaluation after a floating point exception occurred
+   * on this rank is considered a consequence of the invalid state and is not passed on. No
+   * detection is performed if \c FOUR_C_ENABLE_FE_TRAPPING is not set.
+   */
+  bool run_and_detect_floating_point_exceptions(
+      const std::function<void()>& evaluation, MPI_Comm comm)
+  {
+#ifdef FOUR_C_ENABLE_FE_TRAPPING
+    constexpr int handled_floating_point_exceptions = FE_DIVBYZERO | FE_INVALID | FE_OVERFLOW;
+    const int previously_enabled_floating_point_exceptions = fegetexcept();
+
+    fedisableexcept(handled_floating_point_exceptions);
+    feclearexcept(handled_floating_point_exceptions);
+
+    try
+    {
+      evaluation();
+    }
+    catch (const Core::Exception& error)
+    {
+      const bool consequence_of_fe_except =
+          fetestexcept(handled_floating_point_exceptions) != 0;
+      if (not consequence_of_fe_except)
+      {
+        feenableexcept(previously_enabled_floating_point_exceptions);
+        throw;
+      }
+      std::cout << "Rank " << Core::Communication::my_mpi_rank(comm)
+                << ": Error after a floating point exception during the evaluation of the "
+                   "structural elements:\n"
+                << error.what() << "\n";
+    }
+
+    const bool local_fe_except = fetestexcept(handled_floating_point_exceptions) != 0;
+    feclearexcept(handled_floating_point_exceptions);
+    feenableexcept(previously_enabled_floating_point_exceptions);
+
+    if (local_fe_except)
+      std::cout << "Rank " << Core::Communication::my_mpi_rank(comm)
+                << ": Floating point exception during the evaluation of the structural elements.\n";
+
+    return Core::Communication::max_all(static_cast<int>(local_fe_except), comm) > 0;
+#else
+    evaluation();
+    return false;
+#endif
+  }
+}  // namespace
 
 /*----------------------------------------------------------------------------*
  *----------------------------------------------------------------------------*/
@@ -1340,8 +1406,29 @@ void Solid::ModelEvaluator::Structure::evaluate_internal(Teuchos::ParameterList&
   // this is about to go, once the old time integration is deleted
   params_interface2_parameter_list(eval_data_ptr(), p);
 
-  discret().evaluate(p, eval_mat[0], eval_mat[1], eval_vec[0], eval_vec[1], eval_vec[2]);
+  // With a divergence action that reduces the time step, a floating point exception during the
+  // element evaluation (e.g., for an inverted element in a strongly distorted Newton iterate) is
+  // treated as a recoverable failure of the evaluation of the current state.
+  const Solid::DivContAct divergence_action = tim_int().get_data_sdyn().get_divergence_action();
+  if (divergence_action == Solid::DivContAct::stop or
+      divergence_action == Solid::DivContAct::ignore)
+  {
+    discret().evaluate(p, eval_mat[0], eval_mat[1], eval_vec[0], eval_vec[1], eval_vec[2]);
+    discret().clear_state();
+    return;
+  }
+
+  const bool evaluation_failed = run_and_detect_floating_point_exceptions(
+      [&]()
+      { discret().evaluate(p, eval_mat[0], eval_mat[1], eval_vec[0], eval_vec[1], eval_vec[2]); },
+      discret().get_comm());
   discret().clear_state();
+
+  // The failure is known on all ranks (see Solid::RecoverableEvaluationError).
+  if (evaluation_failed)
+    throw Solid::RecoverableEvaluationError(
+        "A floating point exception occurred during the evaluation of the structural elements for "
+        "the current configuration.");
 }
 
 void Solid::ModelEvaluator::Structure::evaluate_internal_specified_elements(
